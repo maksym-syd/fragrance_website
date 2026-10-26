@@ -8,10 +8,14 @@ Vite + React + TypeScript, plain CSS, Supabase (Postgres, Auth, Realtime), deplo
 
 - Every page requires sign-in: **Google** or an **email magic link** (Supabase Auth).
 - Whoever creates a room is its **owner**. A room has a 6-character code and a URL like `/r/K7P2QX`.
-- The owner adds friends' **emails** on the room's *Members* tab. Only the owner and invited emails can open the room. Everyone else sees *"You're not invited to this room — ask the owner to add &lt;their email&gt;"*.
-- All of this is enforced by **Row Level Security** in Postgres (`auth.uid()` / `auth.email()`), not just hidden in the UI. Knowing the code is not enough.
+- Friends can join in two ways:
+  - **With the code** (on by default): anyone who signs in and enters the code, or opens `/r/CODE`, can click **Join room**. Their email is added to the invite list automatically.
+  - **By email invite:** the owner adds friends' emails on the room's *Members* tab.
+- The owner can switch off *"Anyone with the code can join"* to make the room invite-only. Then everyone not on the list sees *"You're not invited to this room — ask the owner to add &lt;their email&gt;"*.
+- Either way people are signed in, so their tiers are saved to their account and follow them across devices.
+- All of this is enforced by **Row Level Security** in Postgres (`auth.uid()` / `auth.email()`), not just hidden in the UI. In an invite-only room, knowing the code is not enough.
 - Members read and write only in rooms they belong to, and you can only change *your own* rankings. Any member can add a fragrance or remove one for everyone. Only the owner can manage invites or delete the room.
-- Removing someone's invite cuts their access immediately and deletes their membership and rankings in that room. The UI asks you to confirm first.
+- Removing someone's invite cuts their access immediately and deletes their membership and rankings in that room. The UI asks you to confirm first. While code joining is on, they could rejoin with the code, so turn it off first if you want someone out for good.
 
 ## Local development
 
@@ -32,7 +36,7 @@ npm test                     # overlap math + RLS policy tests (offline, no Supa
    - **Secret** key (`sb_secret_…`, or the legacy **service_role** key) → `SUPABASE_SERVICE_ROLE_KEY` (scripts only; never expose it in the browser or prefix it with `VITE_`)
 
 ### 2. Run the migration
-Open **SQL Editor → New query**, paste the whole of `supabase/migrations/001_init.sql`, and click **Run**.
+Open **SQL Editor → New query**, paste the whole of `supabase/migrations/001_init.sql`, and click **Run**. Then do the same with `002_join_by_code.sql`. Run the migration files in number order.
 (Or with the Supabase CLI: `supabase link --project-ref <ref> && supabase db push`.)
 
 This creates the tables, constraints, RLS policies and the `create_room` function, and adds `members`, `fragrances` and `rankings` to the `supabase_realtime` publication. To confirm, check **Database → Publications → supabase_realtime** for those three tables.
@@ -84,7 +88,7 @@ This creates a "Demo Sniff Club" with 4 fake members (Ana, Ken, Mia, Leo), 13 fr
 
 ## Security notes
 - The anon key is public by design. RLS is what protects the data, and every table has it enabled with no access for signed-out users.
-- Room codes are **not** the password; the invite list is. A leaked link is useless to anyone whose email isn't invited.
+- With code joining **on**, the room code works like a password: anyone with an account who has the code can join. A code has about a billion possible values, so guessing one is impractical, but don't post it publicly. With code joining **off**, the invite list is the only way in, and a leaked link is useless to anyone whose email isn't on it.
 - Anyone you invite can add fragrances, remove them for everyone, and see everyone's rankings and display names. Only the owner sees members' email addresses in the UI. The data itself is still readable by any member through the API, because members can select the `members` table. Invite people you trust.
 - Supabase Realtime can't filter `DELETE` events by room. Signed-in users may receive bare primary-key IDs (UUIDs, no content) of rows deleted in other rooms. The app ignores IDs it doesn't recognise.
 

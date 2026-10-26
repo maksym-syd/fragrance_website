@@ -32,6 +32,7 @@ export function friendlyError(err: PostgrestError | Error | null | undefined): s
   if (!err) return 'Something went wrong';
   const code = 'code' in err ? err.code : undefined;
   if (code === '23505') return 'That already exists in this room';
+  if (code === 'P0002') return 'Room not found or invite-only';
   if (code === '42501') return "You don't have permission to do that";
   return err.message || 'Something went wrong';
 }
@@ -257,6 +258,32 @@ export function useRoom(code: string, user: User) {
     [roomId, load],
   );
 
+  /** Join via the room code alone (works when the owner allows it). */
+  const joinByCode = useCallback(
+    async (displayName: string) => {
+      const { error: err } = await db().rpc('join_room_by_code', { p_code: code, p_display_name: displayName.trim() });
+      if (err) {
+        return {
+          ok: false,
+          inviteOnly: err.code === 'P0002',
+          message: err.code === '23505' ? 'Someone in this room already uses that name' : friendlyError(err),
+        };
+      }
+      await load();
+      return { ok: true, inviteOnly: false };
+    },
+    [code, load],
+  );
+
+  const setJoinByCode = useCallback(
+    async (open: boolean) => {
+      if (!roomId) return { ok: false };
+      setData((d) => (d.room ? { ...d, room: { ...d.room, join_by_code: open } } : d));
+      return track(() => db().from('rooms').update({ join_by_code: open }).eq('id', roomId));
+    },
+    [roomId, track],
+  );
+
   const rename = useCallback(
     async (displayName: string) => {
       if (!me) return { ok: false };
@@ -317,6 +344,8 @@ export function useRoom(code: string, user: User) {
     addFragrance,
     removeFragrance,
     join,
+    joinByCode,
+    setJoinByCode,
     rename,
     addInvite,
     removeInvite,

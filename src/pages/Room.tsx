@@ -17,7 +17,7 @@ export default function RoomPage({ user }: { user: User }) {
   const api = useRoom(code, user);
 
   if (api.status === 'loading') return <p className="muted pad">Opening room…</p>;
-  if (api.status === 'not-invited') return <NotInvited email={user.email ?? ''} code={code} />;
+  if (api.status === 'not-invited') return <JoinByCode api={api} user={user} code={code} />;
   if (api.status === 'error') {
     return (
       <div className="card narrow">
@@ -80,15 +80,52 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
   );
 }
 
+/** Shown when RLS hides the room from you: try joining with the code, fall back to "not invited". */
+function JoinByCode({ api, user, code }: { api: RoomApi; user: User; code: string }) {
+  const [name, setName] = useState(defaultDisplayName(user));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [inviteOnly, setInviteOnly] = useState(false);
+
+  if (inviteOnly) return <NotInvited email={user.email ?? ''} code={code} />;
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    const res = await api.joinByCode(name);
+    setBusy(false);
+    if (res.inviteOnly) setInviteOnly(true);
+    else if (!res.ok) setError(res.message ?? 'Could not join');
+  }
+
+  return (
+    <form className="narrow center-page stack-sm" onSubmit={onSubmit}>
+      <p className="eyebrow mono">Room {code}</p>
+      <h1 className="display">Join this room</h1>
+      <p className="muted">
+        Your tiers are saved to your account (<span className="email">{user.email}</span>), so they’ll be here on any device.
+      </p>
+      <label className="label" htmlFor="code-display-name">Display name</label>
+      <input id="code-display-name" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} required />
+      <button className="btn btn-primary" disabled={busy || !name.trim()}>
+        {busy ? 'Joining…' : 'Join room'}
+      </button>
+      {error && <p className="error" role="alert">{error}</p>}
+      <Link to="/" className="btn btn-ghost">Back home</Link>
+    </form>
+  );
+}
+
 function NotInvited({ email, code }: { email: string; code: string }) {
   return (
     <div className="narrow center-page stack-sm">
       <p className="eyebrow mono">Room {code}</p>
       <h1 className="display">You’re not invited to this room</h1>
+      <p className="muted small">This room is invite-only (or the code is wrong).</p>
       <p className="lede">
         Ask the owner to add <strong className="email">{email}</strong> on their Members page, then reload.
       </p>
-      <p className="muted small">If the code is mistyped, this room may not exist at all — we can’t tell you which.</p>
       <div className="row-wrap">
         <CopyButton text={email} label="Copy my email" className="btn" />
         <button className="btn btn-ghost" onClick={() => window.location.reload()}>Reload</button>

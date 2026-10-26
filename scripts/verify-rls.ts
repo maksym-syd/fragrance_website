@@ -81,6 +81,18 @@ async function main() {
     const { data: revoked } = await outsider.from('fragrances').select('*').eq('room_id', room.id);
     check('after uninvite: access revoked', revoked!.length === 0);
 
+    await owner.from('rooms').update({ join_by_code: false }).eq('id', room.id);
+    const closed = await outsider.rpc('join_room_by_code', { p_code: room.code, p_display_name: 'Coder' });
+    check('code join refused when invite-only', !!closed.error, closed.error?.message);
+    const flip = await outsider.from('rooms').update({ join_by_code: true }).eq('id', room.id).select();
+    check('non-owner cannot reopen the room', !!flip.error || flip.data!.length === 0);
+
+    await owner.from('rooms').update({ join_by_code: true }).eq('id', room.id);
+    const open = await outsider.rpc('join_room_by_code', { p_code: room.code, p_display_name: 'Coder' });
+    check('code join works when the owner allows it', !open.error, open.error?.message);
+    const { data: viaCode } = await outsider.from('fragrances').select('*').eq('room_id', room.id);
+    check('after code join: can read fragrances', viaCode!.length === 1);
+
     await admin.from('rooms').delete().eq('id', room.id);
   } finally {
     await admin.auth.admin.deleteUser(ownerUser.id);

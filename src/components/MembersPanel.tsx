@@ -18,7 +18,9 @@ export default function MembersPanel({ api }: { api: RoomApi }) {
         <section className="card stack-sm">
           <h2 className="h2">Share</h2>
           <p className="muted small">
-            Only people on the invite list can open this link{api.isOwner ? '' : `. ${owner?.display_name ?? 'The owner'} manages the list`}.
+            {room.join_by_code
+              ? <>Anyone who signs in with this link or the code <strong className="mono">{room.code}</strong> can join.</>
+              : <>Only people on the invite list can open this link{api.isOwner ? '' : `. ${owner?.display_name ?? 'The owner'} manages the list`}.</>}
           </p>
           <div className="share-row">
             <code className="share-link ellipsis">{link}</code>
@@ -96,9 +98,25 @@ function InviteManager({ api }: { api: RoomApi }) {
 
   return (
     <section className="card stack-sm">
-      <h2 className="h2">Invites</h2>
+      <h2 className="h2">Who can join</h2>
+      <label className="switch-row">
+        <input
+          type="checkbox"
+          role="switch"
+          checked={api.room!.join_by_code}
+          onChange={(e) => api.setJoinByCode(e.target.checked)}
+        />
+        <span>
+          <strong>Anyone with the code can join</strong>
+          <span className="muted small block">
+            {api.room!.join_by_code
+              ? 'They still sign in; they’re added to the list below automatically.'
+              : 'Invite-only: only emails on the list below can join.'}
+          </span>
+        </span>
+      </label>
       <p className="muted small">
-        Add the email each friend signs in with (Google or magic link). Then send them the room link.
+        Invite by email (the address each friend signs in with). Removing someone only keeps them out while code joining is off.
       </p>
       <form className="share-row" onSubmit={onSubmit}>
         <input

@@ -77,7 +77,7 @@ export default function Home({ user }: { user: User }) {
 
         <form className="card stack-sm" onSubmit={joinRoom}>
           <h2 className="h2">Join with a code</h2>
-          <p className="muted small">The owner must have invited <strong>{user.email}</strong>.</p>
+          <p className="muted small">Got a 6-character code from a friend? Enter it to join.</p>
           <label className="label" htmlFor="room-code">Room code</label>
           <input
             id="room-code"

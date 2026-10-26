@@ -9,6 +9,7 @@ export interface Room {
   code: string;
   name: string;
   owner_id: string;
+  join_by_code: boolean;
   created_at: string;
 }
 

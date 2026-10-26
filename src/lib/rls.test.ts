@@ -2,7 +2,7 @@
 // on top of a minimal stand-in for Supabase's auth schema and roles, then checks the
 // RLS policies by acting as different signed-in users.
 import { PGlite } from '@electric-sql/pglite';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -50,7 +50,10 @@ let ownerMemberId: string;
 beforeAll(async () => {
   db = new PGlite();
   await db.exec(SUPABASE_SHIM);
-  await db.exec(readFileSync(resolve(__dirname, '../../supabase/migrations/001_init.sql'), 'utf8'));
+  const dir = resolve(__dirname, '../../supabase/migrations');
+  for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
+    await db.exec(readFileSync(resolve(dir, file), 'utf8'));
+  }
   for (const u of [OWNER, FRIEND, STRANGER]) {
     await db.query('insert into auth.users (id, email) values ($1, $2)', [u.id, u.email]);
   }
@@ -158,6 +161,49 @@ describe('RLS: revoking an invite', () => {
     expect(room.rows).toHaveLength(0);
     expect(await count(OWNER, 'members', roomId)).toBe(1);
     expect(await count(OWNER, 'rankings', roomId)).toBe(1);
+  });
+});
+
+describe('Joining by code', () => {
+  const setOpen = (open: boolean) =>
+    as(OWNER, (q) => q('update public.rooms set join_by_code = $1 where id = $2', [open, roomId]));
+  const joinByCode = async (user: User, name: string) => {
+    const code = await db.query<{ code: string }>('select code from public.rooms where id = $1', [roomId]);
+    // Lower-case on purpose: the function should normalize it.
+    return as(user, (q) => q('select * from public.join_room_by_code($1, $2)', [code.rows[0].code.toLowerCase(), name]));
+  };
+
+  it('is refused when the owner turned it off', async () => {
+    await setOpen(false);
+    await expect(joinByCode(STRANGER, 'Sam')).rejects.toThrow(/invite-only/);
+    expect(await count(STRANGER, 'fragrances', roomId)).toBe(0);
+  });
+
+  it('gives the same error for a code that does not exist', async () => {
+    await expect(as(STRANGER, (q) => q(`select * from public.join_room_by_code('ZZZZZZ', 'Sam')`)))
+      .rejects.toThrow(/Room not found or invite-only/);
+  });
+
+  it('only the owner can switch it', async () => {
+    const r = await as(FRIEND, (q) => q('update public.rooms set join_by_code = true where id = $1', [roomId]));
+    expect(r.affectedRows).toBe(0);
+  });
+
+  it('lets anyone signed in join when on, adding them to the invite list', async () => {
+    await setOpen(true);
+    await joinByCode(STRANGER, 'Sam');
+    expect(await count(STRANGER, 'fragrances', roomId)).toBe(1);
+    const inv = await db.query('select 1 from public.invites where room_id = $1 and email = $2', [roomId, STRANGER.email]);
+    expect(inv.rows).toHaveLength(1);
+  });
+
+  it('is idempotent for someone already in the room', async () => {
+    await joinByCode(STRANGER, 'Sam again');
+    expect(await count(OWNER, 'members', roomId)).toBe(2);
+  });
+
+  it('rejects a display name already taken in the room', async () => {
+    await expect(joinByCode(FRIEND, 'olivia')).rejects.toThrow(/duplicate key/);
   });
 });
 
