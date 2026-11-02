@@ -3,9 +3,12 @@
    ========================================================================== */
 
 :root {
-  --font-display: 'Italiana', 'Didot', 'Bodoni 72', Georgia, serif;
-  --font-body: 'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Small labels, pills, captions: same as body, semibold. */
+  --font-mono: var(--font-body);
+  /* Room codes, emails, links. */
+  --font-code: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
   --bg: #f4f1f6;
   --surface: #fdfcfe;
@@ -74,13 +77,13 @@ body {
   color: var(--ink);
   font: 400 15px/1.5 var(--font-body);
   -webkit-font-smoothing: antialiased;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 h1, h2, h3, p { margin: 0; }
 ul { margin: 0; padding: 0; list-style: none; }
 a { color: inherit; }
-code { font-family: var(--font-mono); font-size: 0.85em; }
+code { font-family: var(--font-code); font-size: 0.85em; }
 button { font: inherit; color: inherit; }
 fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 
@@ -106,23 +109,24 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
 
 .display {
   font-family: var(--font-display);
-  font-weight: 400;
+  font-weight: 600;
   font-size: clamp(2rem, 7vw, 3.2rem);
   line-height: 1.05;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
 }
 .hero { font-size: clamp(3rem, 15vw, 5.5rem); }
-.h2 { font-family: var(--font-display); font-weight: 400; font-size: 1.6rem; line-height: 1.1; }
+.h2 { font-family: var(--font-display); font-weight: 600; font-size: 1.6rem; line-height: 1.1; }
 .eyebrow, .label {
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
 }
 .label { display: block; }
 .lede { font-size: 1.05rem; color: var(--ink-2); max-width: 36em; }
-.mono { font-family: var(--font-mono); }
+.mono { font-family: var(--font-code); }
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
 .fine { font-size: 11px; }
@@ -130,7 +134,7 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
 .success { color: var(--success); }
 .danger { color: var(--danger) !important; }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.email { font-family: var(--font-mono); font-size: 0.9em; overflow-wrap: anywhere; }
+.email { font-family: var(--font-code); font-size: 0.9em; overflow-wrap: anywhere; }
 
 /* ---------- layout ---------- */
 
@@ -233,7 +237,8 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
 
 .pill {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   border: 1px solid var(--line);
@@ -301,7 +306,7 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
 
 .home-hero { padding-top: 16px; display: grid; gap: 8px; }
 .home-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
-.code-input { font-family: var(--font-mono); letter-spacing: 0.3em; text-transform: uppercase; font-size: 18px; }
+.code-input { font-family: var(--font-code); letter-spacing: 0.3em; text-transform: uppercase; font-size: 18px; }
 .room-list { display: grid; gap: 8px; }
 .room-link {
   display: flex;
@@ -380,7 +385,7 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
 }
 .tier-row {
   display: grid;
-  grid-template-columns: 64px 1fr;
+  grid-template-columns: 64px minmax(0, 1fr);
   min-height: 68px;
   transition: background 0.12s;
 }
@@ -395,8 +400,8 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
   color: var(--on-tier);
   padding: 8px 4px;
 }
-.tier-label-letter { font-family: var(--font-display); font-size: 2rem; line-height: 1; }
-.tier-label-caption { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; text-align: center; }
+.tier-label-letter { font-family: var(--font-display); font-weight: 600; font-size: 2rem; line-height: 1; }
+.tier-label-caption { font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; text-align: center; }
 .tier-items { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; padding: 8px; min-width: 0; }
 
 .tier-s { --tier: var(--tier-s); }
@@ -423,11 +428,11 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
 .chip.is-dragging { opacity: 0.35; }
 .chip-overlay { box-shadow: var(--shadow); border-color: var(--accent); cursor: grabbing; transform: rotate(-1.5deg); }
 .chip-name { font-size: 14px; font-weight: 500; line-height: 1.2; }
-.chip-house { font-size: 11px; color: var(--muted); line-height: 1.2; }
+.chip-house { font-size: 12px; color: var(--muted); line-height: 1.2; }
 
 .pool { display: grid; gap: 8px; }
-.tier-row-pool {
-  grid-template-columns: 1fr;
+.tier-row.tier-row-pool {
+  grid-template-columns: minmax(0, 1fr);
   border: 1px dashed var(--line);
   border-radius: var(--radius);
   min-height: 72px;
@@ -475,7 +480,7 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
 .sheet:focus { outline: none; }
 .sheet-grip { width: 40px; height: 4px; border-radius: 4px; background: var(--line); margin: 0 auto; }
 .sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.sheet-title { font-family: var(--font-display); font-weight: 400; font-size: 2rem; line-height: 1.05; }
+.sheet-title { font-family: var(--font-display); font-weight: 600; font-size: 2rem; line-height: 1.05; }
 .tier-buttons { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .tier-button {
   display: grid;
@@ -489,8 +494,8 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
   cursor: pointer;
   min-height: 64px;
 }
-.tier-button-letter { font-family: var(--font-display); font-size: 1.8rem; line-height: 1; }
-.tier-button-caption { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; }
+.tier-button-letter { font-family: var(--font-display); font-weight: 600; font-size: 1.8rem; line-height: 1; }
+.tier-button-caption { font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 .tier-button.is-current { border-color: var(--ink); box-shadow: 0 0 0 2px var(--surface) inset; }
 .is-current-plain { border-color: var(--ink); }
 .sheet-others { display: grid; gap: 6px; }
@@ -582,7 +587,7 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
 
 .grid-table { border-collapse: collapse; width: 100%; font-size: 13px; }
 .grid-table th, .grid-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
-.grid-table thead th { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 400; max-width: 90px; }
+.grid-table thead th { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 400; max-width: 90px; }
 .grid-table tbody tr:last-child > * { border-bottom: 0; }
 .grid-table .sticky-col {
   position: sticky;
@@ -743,7 +748,7 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
   :root { --gutter: 24px; }
   .home-grid { grid-template-columns: 1fr 1fr; }
   .form-grid { grid-template-columns: 1fr 1fr; }
-  .tier-row { grid-template-columns: 96px 1fr; min-height: 76px; }
+  .tier-row { grid-template-columns: 96px minmax(0, 1fr); min-height: 76px; }
   .tier-label-letter { font-size: 2.4rem; }
   .tabs { display: flex; gap: 28px; }
   .tab { padding-inline: 0; }
