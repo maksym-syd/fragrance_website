@@ -2,13 +2,14 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { RoomApi } from '../hooks/useRoom';
 import { isEmail, normalizeEmail } from '../lib/normalize';
+import { roomLink } from '../lib/site';
 import { ConfirmButton, CopyButton } from './ui';
 
 export default function MembersPanel({ api }: { api: RoomApi }) {
   const room = api.room!;
   const me = api.me!;
   const owner = api.members.find((m) => m.user_id === room.owner_id);
-  const link = `${window.location.origin}/r/${room.code}`;
+  const link = roomLink(room.code);
 
   return (
     <div className="members-layout">
@@ -89,7 +90,7 @@ function inviteMailto(email: string, roomName: string, link: string) {
 }
 
 function InviteManager({ api }: { api: RoomApi }) {
-  const link = `${window.location.origin}/r/${api.room!.code}`;
+  const link = roomLink(api.room!.code);
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const joined = new Set(api.members.map((m) => m.email));
