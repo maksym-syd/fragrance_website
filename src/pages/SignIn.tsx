@@ -42,7 +42,7 @@ export default function SignIn() {
           <div className="divider"><span>or</span></div>
           {state === 'sent' ? (
             <p className="success" role="status">
-              Check <strong>{normalizeEmail(email)}</strong> for a sign-in link. You can close this tab.
+              Check <strong>{normalizeEmail(email)}</strong> for a sign-in link (it can take a few minutes — check Spam/Promotions too). Not arriving? Use Google above.
             </p>
           ) : (
             <form onSubmit={onSubmit} className="stack-sm">

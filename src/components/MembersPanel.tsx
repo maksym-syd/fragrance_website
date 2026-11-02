@@ -81,7 +81,15 @@ function NameEditor({ api }: { api: RoomApi }) {
   );
 }
 
+/** Opens the owner's own mail app, so the invite comes from someone the friend knows (and avoids spam folders). */
+function inviteMailto(email: string, roomName: string, link: string) {
+  const subject = `Join "${roomName}" on Scent Tiers`;
+  const body = `Hey! I added you to our fragrance tier list "${roomName}".\n\nOpen this link and sign in with Google using ${email} (or ask for an email link):\n${link}\n`;
+  return `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
 function InviteManager({ api }: { api: RoomApi }) {
+  const link = `${window.location.origin}/r/${api.room!.code}`;
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const joined = new Set(api.members.map((m) => m.email));
@@ -116,7 +124,8 @@ function InviteManager({ api }: { api: RoomApi }) {
         </span>
       </label>
       <p className="muted small">
-        Invite by email (the address each friend signs in with). Removing someone only keeps them out while code joining is off.
+        Add the email each friend signs in with. <strong>This doesn’t email them</strong> — use “Send link” or share the
+        room link yourself. Removing someone only keeps them out while code joining is off.
       </p>
       <form className="share-row" onSubmit={onSubmit}>
         <input
@@ -143,6 +152,9 @@ function InviteManager({ api }: { api: RoomApi }) {
                   {joined.has(inv.email) ? 'Joined' : 'Pending'}
                 </span>
               </div>
+              {!joined.has(inv.email) && (
+                <a className="btn-link small" href={inviteMailto(inv.email, api.room!.name, link)}>Send link</a>
+              )}
               <ConfirmButton
                 label="Remove"
                 confirmLabel="Remove access"
