@@ -12,9 +12,14 @@ export default function AddFragrance({ api, onOpen }: { api: RoomApi; onOpen: (i
   const [notesText, setNotesText] = useState('');
   const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string; id?: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState('');
 
   const existing = useMemo(() => new Set(api.fragrances.map((f) => dedupeKey(f.name, f.house))), [api.fragrances]);
-  const quick = POPULAR.filter((p) => !existing.has(dedupeKey(p.name, p.house)));
+  const available = POPULAR.filter((p) => !existing.has(dedupeKey(p.name, p.house)));
+  const q = search.trim().toLowerCase();
+  const quick = q
+    ? available.filter((p) => [p.name, p.house, ...p.notes].some((t) => t.toLowerCase().includes(q)))
+    : available;
   const notes = parseNotes(notesText);
   const knownNotes = useMemo(() => {
     const counts = new Map<string, number>();
@@ -117,10 +122,21 @@ export default function AddFragrance({ api, onOpen }: { api: RoomApi; onOpen: (i
       <section className="stack-sm">
         <header className="section-head">
           <h2 className="h2">Quick add</h2>
-          <span className="label">{quick.length} popular picks</span>
+          <span className="label">{available.length} picks</span>
         </header>
-        {quick.length === 0 ? (
+        {available.length > 0 && (
+          <input
+            type="search"
+            aria-label="Search quick add"
+            placeholder="Search name, house or note (e.g. fig, Byredo)"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        )}
+        {available.length === 0 ? (
           <p className="muted">You’ve added every one of them. Impressive shelf.</p>
+        ) : quick.length === 0 ? (
+          <p className="muted">No matches. Add it with the form instead.</p>
         ) : (
           <ul className="quick-list">
             {quick.map((p) => (

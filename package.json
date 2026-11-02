@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "seed": "tsx scripts/seed.ts",
-    "verify-rls": "tsx scripts/verify-rls.ts"
+    "verify-rls": "tsx scripts/verify-rls.ts",
+    "export": "tsx scripts/export.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
