@@ -1,12 +1,12 @@
 import type { User } from '@supabase/supabase-js';
-import { useState, type FormEvent } from 'react';
-import { Link, NavLink, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { useCallback, useState, type FormEvent } from 'react';
+import { Link, NavLink, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import AddFragrance from '../components/AddFragrance';
 import MembersPanel from '../components/MembersPanel';
 import MyTiers from '../components/MyTiers';
 import Overlap from '../components/Overlap';
 import TierSheet from '../components/TierSheet';
-import { CopyButton } from '../components/ui';
+import { CopyButton, useDocumentTitle } from '../components/ui';
 import { signOut } from '../hooks/useAuth';
 import { useRoom, type RoomApi, type SaveStatus } from '../hooks/useRoom';
 import { defaultDisplayName, normalizeCode } from '../lib/normalize';
@@ -15,14 +15,19 @@ export default function RoomPage({ user }: { user: User }) {
   const params = useParams();
   const code = normalizeCode(params.code ?? '');
   const api = useRoom(code, user);
+  useDocumentTitle(roomTitle(api, useLocation().pathname));
 
-  if (api.status === 'loading') return <p className="muted pad">Opening room…</p>;
+  if (api.status === 'loading') return <RoomSkeleton />;
   if (api.status === 'not-invited') return <JoinByCode api={api} user={user} code={code} />;
   if (api.status === 'error') {
     return (
-      <div className="card narrow">
-        <p className="error">{api.error}</p>
-        <button className="btn" onClick={() => api.reload()}>Try again</button>
+      <div className="narrow center-page stack-sm">
+        <h1 className="display">Couldn’t open this room</h1>
+        <p className="error" role="alert">{api.error}</p>
+        <div className="row-wrap">
+          <button className="btn btn-primary" onClick={() => api.reload()}>Try again</button>
+          <Link className="btn btn-ghost" to="/">Back home</Link>
+        </div>
       </div>
     );
   }
@@ -30,8 +35,49 @@ export default function RoomPage({ user }: { user: User }) {
   return <RoomView api={api} />;
 }
 
+const SECTION_TITLE: Record<string, string> = { overlap: 'Overlap', add: 'Add', members: 'Members' };
+
+function roomTitle(api: RoomApi, pathname: string) {
+  if (api.status === 'loading') return undefined;
+  if (!api.room || api.status !== 'ready') return 'Join room';
+  const section = SECTION_TITLE[pathname.split('/')[3] ?? ''] ?? 'My tiers';
+  return `${section} – ${api.room.name}`;
+}
+
+/** Same boxes as the loaded room, so the page doesn't jump when the data lands. */
+function RoomSkeleton() {
+  return (
+    <div className="room" aria-busy="true">
+      <p className="sr-only" role="status">Opening room…</p>
+      <header className="room-head" aria-hidden>
+        <span className="skeleton display" style={{ height: '1.05em', width: '70%' }} />
+        <span className="skeleton skeleton-text" style={{ '--w': '45%' } as React.CSSProperties} />
+      </header>
+      <div className="tier-board" aria-hidden>
+        {['s', 'a', 'b', 'c', 'd'].map((t) => (
+          <div key={t} className="tier-row">
+            <div className="tier-label skeleton" />
+            <div className="tier-items">
+              <span className="chip skeleton" style={{ width: '42%' }} />
+              <span className="chip skeleton" style={{ width: '30%' }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RoomView({ api }: { api: RoomApi }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const closeSheet = useCallback(() => {
+    // The chip may have moved to another row (a new element), so find it by id, not by reference.
+    const id = openId;
+    setOpenId(null);
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLElement>(`[data-frag-id="${id}"]`)?.focus({ preventScroll: true }),
+    );
+  }, [openId]);
   const room = api.room!;
   const base = `/r/${room.code}`;
   const open = openId ? api.fragrances.find((f) => f.id === openId) ?? null : null;
@@ -39,10 +85,7 @@ function RoomView({ api }: { api: RoomApi }) {
   return (
     <div className="room">
       <header className="room-head">
-        <div className="room-title-row">
-          <h1 className="display room-title">{room.name}</h1>
-          <SaveIndicator status={api.save} />
-        </div>
+        <h1 className="display">{room.name}</h1>
         <div className="room-meta">
           <span className="code-chip mono" aria-label="Room code">{room.code}</span>
           <span className="muted small">
@@ -66,7 +109,8 @@ function RoomView({ api }: { api: RoomApi }) {
         <Route path="*" element={<Navigate to={base} replace />} />
       </Routes>
 
-      {open && <TierSheet api={api} fragrance={open} onClose={() => setOpenId(null)} />}
+      <SaveIndicator status={api.save} />
+      {open && <TierSheet api={api} fragrance={open} onClose={closeSheet} />}
     </div>
   );
 }
@@ -101,7 +145,7 @@ function JoinByCode({ api, user, code }: { api: RoomApi; user: User; code: strin
 
   return (
     <form className="narrow center-page stack-sm" onSubmit={onSubmit}>
-      <p className="eyebrow mono">Room {code}</p>
+      <p className="eyebrow">Room <span className="mono">{code}</span></p>
       <h1 className="display">Join this room</h1>
       <p className="muted">
         Your tiers are saved to your account (<span className="email">{user.email}</span>), so they’ll be here on any device.
@@ -120,7 +164,7 @@ function JoinByCode({ api, user, code }: { api: RoomApi; user: User; code: strin
 function NotInvited({ email, code }: { email: string; code: string }) {
   return (
     <div className="narrow center-page stack-sm">
-      <p className="eyebrow mono">Room {code}</p>
+      <p className="eyebrow">Room <span className="mono">{code}</span></p>
       <h1 className="display">You’re not invited to this room</h1>
       <p className="muted small">This room is invite-only (or the code is wrong).</p>
       <p className="lede">

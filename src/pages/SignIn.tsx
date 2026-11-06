@@ -1,6 +1,9 @@
 import { useState, type FormEvent } from 'react';
+import { useDocumentTitle } from '../components/ui';
 import { sendMagicLink, signInWithGoogle } from '../hooks/useAuth';
 import { isEmail, normalizeEmail } from '../lib/normalize';
+import { TIERS } from '../lib/overlap';
+import { TIER_LABEL } from '../lib/tiers';
 
 export default function SignIn() {
   const [email, setEmail] = useState('');
@@ -8,6 +11,7 @@ export default function SignIn() {
   const [message, setMessage] = useState('');
 
   const inRoom = window.location.pathname.startsWith('/r/');
+  useDocumentTitle('Sign in');
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -30,9 +34,16 @@ export default function SignIn() {
   return (
     <main className="signin">
       <div className="signin-inner">
-        <p className="eyebrow">A shared fragrance tier list</p>
         <h1 className="display hero">Scent Tiers</h1>
         <p className="lede">Rank what you’ve worn, see where your friends’ noses agree — and where they really don’t.</p>
+        <ul className="tier-spectrum" aria-label="The five tiers">
+          {TIERS.map((t) => (
+            <li key={t} className={`tier-${t.toLowerCase()}`}>
+              <b>{t}</b>
+              <span>{TIER_LABEL[t]}</span>
+            </li>
+          ))}
+        </ul>
         {inRoom && <p className="notice">Sign in to open this room.</p>}
 
         <div className="card signin-card">
@@ -64,7 +75,7 @@ export default function SignIn() {
             </form>
           )}
         </div>
-        <p className="fine mono">Invite-only rooms · your email decides which rooms you can open</p>
+        <p className="small muted">Your tiers are saved to your account, so they follow you to any device.</p>
       </div>
     </main>
   );

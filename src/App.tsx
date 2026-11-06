@@ -38,7 +38,7 @@ function Shell({ user, children }: { user: User; children: ReactNode }) {
       <header className="topbar">
         <Link to="/" className="wordmark">Scent Tiers</Link>
         <div className="topbar-user">
-          <span className="mono muted ellipsis" title={user.email}>{user.email}</span>
+          <span className="topbar-email muted ellipsis" title={user.email}>{user.email}</span>
           <button className="btn-link" onClick={() => signOut()}>Sign out</button>
         </div>
       </header>
