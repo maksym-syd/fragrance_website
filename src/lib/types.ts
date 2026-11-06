@@ -34,7 +34,14 @@ export interface Fragrance {
   name: string;
   house: string;
   concentration: Concentration | null;
+  /** Flat list that the overlap math reads: the pyramid plus any notes with no known position. */
   notes: string[];
+  perfumers: string[];
+  accords: string[];
+  notes_top: string[];
+  notes_heart: string[];
+  notes_base: string[];
+  release_year: number | null;
   added_by: string | null;
   created_at: string;
 }
@@ -52,4 +59,13 @@ export interface NewFragrance {
   house: string;
   concentration: Concentration | null;
   notes: string[];
+  perfumers?: string[];
+  accords?: string[];
+  notes_top?: string[];
+  notes_heart?: string[];
+  notes_base?: string[];
+  release_year?: number | null;
 }
+
+/** Everything the edit form saves. Only these columns have an UPDATE grant. */
+export type FragrancePatch = Required<NewFragrance>;

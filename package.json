@@ -11,7 +11,10 @@
     "test:watch": "vitest",
     "seed": "tsx scripts/seed.ts",
     "verify-rls": "tsx scripts/verify-rls.ts",
-    "export": "tsx scripts/export.ts"
+    "export": "tsx scripts/export.ts",
+    "backup": "tsx scripts/backup.ts",
+    "build-catalog": "tsx scripts/build-catalog.ts",
+    "backfill": "tsx scripts/backfill-details.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

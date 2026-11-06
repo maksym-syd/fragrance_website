@@ -1,0 +1,71 @@
+/* Combobox, token inputs and fragrance details. Tokens only: no colours of its own. */
+
+.combo { position: relative; min-width: 0; }
+
+.combo-list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: min(320px, 50vh);
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+.combo-list[hidden] { display: none; }
+
+.combo-option {
+  display: grid;
+  gap: 1px;
+  align-content: center;
+  min-height: 44px; /* comfortable touch target */
+  padding: 6px 10px;
+  border-radius: calc(var(--radius-sm) - 3px);
+  cursor: pointer;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.combo-option:hover,
+.combo-option.is-active { background: var(--surface-2); }
+.combo-option.is-active { box-shadow: inset 0 0 0 1px var(--accent); }
+.combo-main { font-weight: 600; }
+.combo-sub { font-size: 12px; color: var(--muted); }
+
+.token-box { display: grid; gap: 6px; min-width: 0; }
+.token-box .tags { margin: 0; padding: 0; list-style: none; }
+.token {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding-left: 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+.token-x {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 50%;
+}
+.token-x:hover { color: var(--danger); }
+
+.form-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.form-actions .btn-primary { flex: 1 1 auto; }
+
+.details { display: grid; gap: 10px; }
+.detail-row { display: grid; gap: 4px; }
+.details .btn-link { justify-self: start; }

@@ -9,6 +9,8 @@ import { serviceClient } from './env';
 
 type Row = Record<string, string | number | null | undefined>;
 
+const DETAIL_COLUMNS = ['perfumers', 'accords', 'notes_top', 'notes_heart', 'notes_base', 'release_year'];
+
 function csv(rows: Row[], columns: string[]): string {
   const cell = (v: Row[string]) => {
     if (v === null || v === undefined) return '';
@@ -33,8 +35,21 @@ async function all<T>(admin: ReturnType<typeof serviceClient>['admin'], table: s
 
 interface Room { id: string; code: string; name: string; join_by_code: boolean; created_at: string }
 interface Member { id: string; room_id: string; email: string; display_name: string; joined_at: string }
-interface Fragrance { id: string; room_id: string; name: string; house: string; concentration: string | null; notes: string[]; added_by: string | null; created_at: string }
+interface Fragrance {
+  id: string; room_id: string; name: string; house: string; concentration: string | null; notes: string[];
+  perfumers: string[]; accords: string[]; notes_top: string[]; notes_heart: string[]; notes_base: string[]; release_year: number | null;
+  added_by: string | null; created_at: string;
+}
 interface Ranking { room_id: string; member_id: string; fragrance_id: string; tier: keyof typeof TIER_VALUE; updated_at: string }
+
+const details = (f: Fragrance) => ({
+  perfumers: f.perfumers.join('; '),
+  accords: f.accords.join('; '),
+  notes_top: f.notes_top.join('; '),
+  notes_heart: f.notes_heart.join('; '),
+  notes_base: f.notes_base.join('; '),
+  release_year: f.release_year,
+});
 
 async function main() {
   const { admin } = serviceClient();
@@ -68,6 +83,7 @@ async function main() {
       house: f.house,
       concentration: f.concentration,
       notes: f.notes.join('; '),
+      ...details(f),
       tier: r.tier,
       score: TIER_VALUE[r.tier],
       updated_at: r.updated_at,
@@ -84,6 +100,7 @@ async function main() {
       house: f.house,
       concentration: f.concentration,
       notes: f.notes.join('; '),
+      ...details(f),
       ratings: scores.length,
       avg_score: mean === null ? null : mean.toFixed(2),
       min_score: scores.length ? Math.min(...scores) : null,
@@ -119,8 +136,8 @@ async function main() {
     writeFileSync(join(dir, `matrix_${room.code}.csv`), csv(rows, ['fragrance', 'house', ...people.map((p) => p.display_name)]));
   }
 
-  writeFileSync(join(dir, 'rankings.csv'), csv(rankingRows, ['room_code', 'room_name', 'member', 'fragrance', 'house', 'concentration', 'notes', 'tier', 'score', 'updated_at']));
-  writeFileSync(join(dir, 'fragrances.csv'), csv(fragRows, ['room_code', 'fragrance', 'house', 'concentration', 'notes', 'ratings', 'avg_score', 'min_score', 'max_score', 'added_by', 'added_at']));
+  writeFileSync(join(dir, 'rankings.csv'), csv(rankingRows, ['room_code', 'room_name', 'member', 'fragrance', 'house', 'concentration', 'notes', ...DETAIL_COLUMNS, 'tier', 'score', 'updated_at']));
+  writeFileSync(join(dir, 'fragrances.csv'), csv(fragRows, ['room_code', 'fragrance', 'house', 'concentration', 'notes', ...DETAIL_COLUMNS, 'ratings', 'avg_score', 'min_score', 'max_score', 'added_by', 'added_at']));
   writeFileSync(join(dir, 'members.csv'), csv(memberRows, ['room_code', 'member', 'email', 'ratings', 'joined_at']));
   writeFileSync(join(dir, 'rooms.csv'), csv(rooms.map((r) => ({ ...r, join_by_code: String(r.join_by_code) })), ['code', 'name', 'join_by_code', 'created_at']));
 

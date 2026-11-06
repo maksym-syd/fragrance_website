@@ -1,8 +1,9 @@
 import type { PostgrestError, RealtimePostgresChangesPayload, User } from '@supabase/supabase-js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { dedupeKey } from '../lib/normalize';
+import { looseKey } from '../lib/reference';
 import { db } from '../lib/supabase';
-import type { Fragrance, Invite, Member, NewFragrance, Ranking, Room, Tier } from '../lib/types';
+import type { Fragrance, FragrancePatch, Invite, Member, NewFragrance, Ranking, Room, Tier } from '../lib/types';
 
 export type RoomStatus = 'loading' | 'not-invited' | 'join' | 'ready' | 'error';
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -26,6 +27,26 @@ function upsertBy<T>(list: T[], item: T, key: (t: T) => string): T[] {
   const next = list.slice();
   next[i] = item;
   return next;
+}
+
+/** Rows from before migration 003 (or a stale realtime payload) may lack the detail columns. */
+function withDetails(row: Fragrance): Fragrance {
+  return {
+    ...row,
+    perfumers: row.perfumers ?? [],
+    accords: row.accords ?? [],
+    notes_top: row.notes_top ?? [],
+    notes_heart: row.notes_heart ?? [],
+    notes_base: row.notes_base ?? [],
+    release_year: row.release_year ?? null,
+  };
+}
+
+/** The same bottle already in `list`? Looser than the SQL index, so "Hermes" finds "Hermès". */
+function findDuplicate(list: Fragrance[], name: string, house: string, ignoreId?: string): Fragrance | undefined {
+  const strict = dedupeKey(name, house);
+  const loose = looseKey(name, house);
+  return list.find((x) => x.id !== ignoreId && (dedupeKey(x.name, x.house) === strict || looseKey(x.name, x.house) === loose));
 }
 
 export function friendlyError(err: PostgrestError | Error | null | undefined): string {
@@ -78,7 +99,7 @@ export function useRoom(code: string, user: User) {
     setData({
       room,
       members,
-      fragrances: (f.data ?? []) as Fragrance[],
+      fragrances: ((f.data ?? []) as Fragrance[]).map(withDetails),
       rankings: (r.data ?? []) as Ranking[],
       invites: (inv.data ?? []) as Invite[],
     });
@@ -136,7 +157,7 @@ export function useRoom(code: string, user: User) {
       if (row.room_id !== roomId) return;
       setData((d) => {
         if (table === 'rankings') return { ...d, rankings: upsertBy(d.rankings, row as unknown as Ranking, rankKey) };
-        if (table === 'fragrances') return { ...d, fragrances: upsertBy(d.fragrances, row as unknown as Fragrance, (x) => x.id) };
+        if (table === 'fragrances') return { ...d, fragrances: upsertBy(d.fragrances, withDetails(row as unknown as Fragrance), (x) => x.id) };
         return { ...d, members: upsertBy(d.members, row as unknown as Member, (x) => x.id) };
       });
     };
@@ -210,10 +231,8 @@ export function useRoom(code: string, user: User) {
   const addFragrance = useCallback(
     async (f: NewFragrance) => {
       if (!me || !roomId) return { ok: false, message: 'Not in a room' };
-      const key = dedupeKey(f.name, f.house);
-      if (data.fragrances.some((x) => dedupeKey(x.name, x.house) === key)) {
-        return { ok: false, message: `${f.name} by ${f.house} is already in this room` };
-      }
+      const dupe = findDuplicate(data.fragrances, f.name, f.house);
+      if (dupe) return { ok: false, message: `${dupe.name} by ${dupe.house} is already in this room` };
       const res = await track<Fragrance>(() =>
         db()
           .from('fragrances')
@@ -222,12 +241,34 @@ export function useRoom(code: string, user: User) {
           .single(),
       );
       if (res.ok && res.data) {
-        const created = res.data;
+        const created = withDetails(res.data);
         setData((d) => ({ ...d, fragrances: upsertBy(d.fragrances, created, (x) => x.id) }));
       }
       return res;
     },
     [me, roomId, data.fragrances, track],
+  );
+
+  /** Any member can edit. Other people's screens pick this up through the realtime UPDATE. */
+  const updateFragrance = useCallback(
+    async (id: string, patch: FragrancePatch) => {
+      const dupe = findDuplicate(data.fragrances, patch.name, patch.house, id);
+      if (dupe) return { ok: false, message: `${dupe.name} by ${dupe.house} is already in this room` };
+      const res = await track<Fragrance>(() =>
+        db()
+          .from('fragrances')
+          .update({ ...patch, name: patch.name.trim(), house: patch.house.trim() })
+          .eq('id', id)
+          .select()
+          .single(),
+      );
+      if (res.ok && res.data) {
+        const updated = withDetails(res.data);
+        setData((d) => ({ ...d, fragrances: upsertBy(d.fragrances, updated, (x) => x.id) }));
+      }
+      return res;
+    },
+    [data.fragrances, track],
   );
 
   const removeFragrance = useCallback(
@@ -342,6 +383,7 @@ export function useRoom(code: string, user: User) {
     reload: load,
     setTier,
     addFragrance,
+    updateFragrance,
     removeFragrance,
     join,
     joinByCode,

@@ -149,45 +149,59 @@ export function tryNext(memberId: string, memberIds: string[], idx: RankIndex): 
   return { match: best, fragranceIds };
 }
 
-export interface NoteRow {
-  note: string;
-  /** member_id -> { avg tier value, how many of that note they ranked } */
+export interface TagRow {
+  tag: string;
+  /** member_id -> { avg tier value, how many fragrances with that tag they ranked } */
   perMember: Map<string, { avg: number; count: number }>;
   totalRankings: number;
+}
+
+export interface NoteRow extends Omit<TagRow, 'tag'> {
+  note: string;
 }
 
 export function normalizeNote(note: string): string {
   return note.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-/** For each note tag, each member's average tier over fragrances carrying that note. */
-export function noteOverlap(fragrances: FragranceLike[], idx: RankIndex): NoteRow[] {
-  const notesByFragrance = new Map<string, string[]>();
+/** For each tag, each member's average tier over fragrances carrying that tag. */
+export function tagOverlap<F extends { id: string }>(fragrances: F[], idx: RankIndex, tagsOf: (f: F) => string[]): TagRow[] {
+  const tagsByFragrance = new Map<string, string[]>();
   for (const f of fragrances) {
-    notesByFragrance.set(f.id, [...new Set(f.notes.map(normalizeNote).filter(Boolean))]);
+    tagsByFragrance.set(f.id, [...new Set(tagsOf(f).map(normalizeNote).filter(Boolean))]);
   }
   const sums = new Map<string, Map<string, { sum: number; count: number }>>();
   for (const [memberId, ranks] of idx) {
     for (const [fid, v] of ranks) {
-      for (const note of notesByFragrance.get(fid) ?? []) {
-        let byMember = sums.get(note);
-        if (!byMember) sums.set(note, (byMember = new Map()));
+      for (const tag of tagsByFragrance.get(fid) ?? []) {
+        let byMember = sums.get(tag);
+        if (!byMember) sums.set(tag, (byMember = new Map()));
         const cur = byMember.get(memberId) ?? { sum: 0, count: 0 };
         byMember.set(memberId, { sum: cur.sum + v, count: cur.count + 1 });
       }
     }
   }
-  const rows: NoteRow[] = [];
-  for (const [note, byMember] of sums) {
+  const rows: TagRow[] = [];
+  for (const [tag, byMember] of sums) {
     const perMember = new Map<string, { avg: number; count: number }>();
     let totalRankings = 0;
     for (const [mid, { sum, count }] of byMember) {
       perMember.set(mid, { avg: sum / count, count });
       totalRankings += count;
     }
-    rows.push({ note, perMember, totalRankings });
+    rows.push({ tag, perMember, totalRankings });
   }
-  return rows.sort((a, b) => b.totalRankings - a.totalRankings || a.note.localeCompare(b.note));
+  return rows.sort((a, b) => b.totalRankings - a.totalRankings || a.tag.localeCompare(b.tag));
+}
+
+/** For each note tag, each member's average tier over fragrances carrying that note. */
+export function noteOverlap(fragrances: FragranceLike[], idx: RankIndex): NoteRow[] {
+  return tagOverlap(fragrances, idx, (f) => f.notes).map(({ tag, ...row }) => ({ note: tag, ...row }));
+}
+
+/** The same, per accord. Rows without accords (old fragrances) simply don't count. */
+export function accordOverlap(fragrances: Array<{ id: string; accords?: string[] }>, idx: RankIndex): TagRow[] {
+  return tagOverlap(fragrances, idx, (f) => f.accords ?? []);
 }
 
 /** Fragrances with at least one ranking, highest average first. */

@@ -17,6 +17,7 @@ import {
 } from '../lib/overlap';
 import type { Fragrance, Member } from '../lib/types';
 import { Empty, TierLetter } from './ui';
+import AccordsSection from './AccordsSection';
 
 export default function Overlap({ api, onOpen }: { api: RoomApi; onOpen: (id: string) => void }) {
   const me = api.me!;
@@ -193,6 +194,7 @@ export default function Overlap({ api, onOpen }: { api: RoomApi; onOpen: (id: st
       </div>
 
       <NotesSection notes={a.notes} members={members} />
+      <AccordsSection api={api} members={members} />
 
       <section className="stack-sm">
         <SectionHead title="Side by side" hint="Sorted by group average" />
