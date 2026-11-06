@@ -1,5 +1,12 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { Tier } from '../lib/types';
+
+/** Sets the browser tab title; the app name always comes last. */
+export function useDocumentTitle(title?: string) {
+  useEffect(() => {
+    document.title = title ? `${title} – Scent Tiers` : 'Scent Tiers';
+  }, [title]);
+}
 
 export function TierLetter({ tier, size = 'md', title }: { tier: Tier | null; size?: 'sm' | 'md'; title?: string }) {
   if (!tier) return <span className={`tier-letter tier-none ${size}`} title={title ?? "Haven't tried"}>·</span>;
@@ -17,7 +24,7 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
 }
 
 export function CopyButton({ text, label = 'Copy', className = 'btn btn-ghost btn-sm' }: { text: string; label?: string; className?: string }) {
-  const [copied, setCopied] = useState(false);
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   return (
     <button
       type="button"
@@ -25,14 +32,14 @@ export function CopyButton({ text, label = 'Copy', className = 'btn btn-ghost bt
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
+          setState('copied');
         } catch {
-          /* clipboard blocked; nothing useful to do */
+          setState('failed'); // clipboard blocked: say so rather than look like it worked
         }
+        setTimeout(() => setState('idle'), 1800);
       }}
     >
-      {copied ? 'Copied' : label}
+      {state === 'copied' ? 'Copied' : state === 'failed' ? 'Couldn’t copy' : label}
     </button>
   );
 }

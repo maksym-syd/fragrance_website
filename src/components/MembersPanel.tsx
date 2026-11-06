@@ -14,8 +14,6 @@ export default function MembersPanel({ api }: { api: RoomApi }) {
   return (
     <div className="members-layout">
       <div className="stack">
-        <NameEditor api={api} />
-
         <section className="card stack-sm">
           <h2 className="h2">Share</h2>
           <p className="muted small">
@@ -29,6 +27,8 @@ export default function MembersPanel({ api }: { api: RoomApi }) {
           </div>
         </section>
 
+        <NameEditor api={api} />
+
         <section className="stack-sm">
           <h2 className="h2">Members</h2>
           <ul className="member-list">
@@ -40,7 +40,7 @@ export default function MembersPanel({ api }: { api: RoomApi }) {
                     {m.display_name}
                     {m.id === me.id && <span className="muted"> (you)</span>}
                   </span>
-                  {api.isOwner && <span className="muted fine mono ellipsis">{m.email}</span>}
+                  {api.isOwner && <span className="muted small ellipsis">{m.email}</span>}
                 </span>
                 {m.user_id === room.owner_id && <span className="pill">Owner</span>}
               </li>
@@ -148,7 +148,7 @@ function InviteManager({ api }: { api: RoomApi }) {
           {api.invites.map((inv) => (
             <li key={inv.email} className="invite">
               <div className="invite-main">
-                <span className="mono small ellipsis">{inv.email}</span>
+                <span className="small ellipsis">{inv.email}</span>
                 <span className={`pill ${joined.has(inv.email) ? '' : 'pill-accent'}`}>
                   {joined.has(inv.email) ? 'Joined' : 'Pending'}
                 </span>

@@ -1,6 +1,7 @@
 import type { User } from '@supabase/supabase-js';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useDocumentTitle } from '../components/ui';
 import { friendlyError } from '../hooks/useRoom';
 import { defaultDisplayName, normalizeCode } from '../lib/normalize';
 import { db } from '../lib/supabase';
@@ -17,18 +18,28 @@ export default function Home({ user }: { user: User }) {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [loadFailed, setLoadFailed] = useState(false);
+  useDocumentTitle('Your rooms');
+
+  const loadRooms = useCallback(async () => {
+    setLoadFailed(false);
+    setRooms(null);
+    // RLS returns exactly the rooms you own or are invited to.
+    const [r, m] = await Promise.all([
+      db().from('rooms').select('*').order('created_at', { ascending: false }),
+      db().from('members').select('room_id').eq('user_id', user.id),
+    ]);
+    if (r.error || m.error) {
+      setLoadFailed(true);
+      return;
+    }
+    const joined = new Set((m.data ?? []).map((x) => x.room_id as string));
+    setRooms(((r.data ?? []) as Room[]).map((room) => ({ ...room, joined: joined.has(room.id) })));
+  }, [user.id]);
 
   useEffect(() => {
-    (async () => {
-      // RLS returns exactly the rooms you own or are invited to.
-      const [r, m] = await Promise.all([
-        db().from('rooms').select('*').order('created_at', { ascending: false }),
-        db().from('members').select('room_id').eq('user_id', user.id),
-      ]);
-      const joined = new Set((m.data ?? []).map((x) => x.room_id as string));
-      setRooms(((r.data ?? []) as Room[]).map((room) => ({ ...room, joined: joined.has(room.id) })));
-    })();
-  }, [user.id]);
+    loadRooms();
+  }, [loadRooms]);
 
   async function createRoom(e: FormEvent) {
     e.preventDefault();
@@ -50,6 +61,45 @@ export default function Home({ user }: { user: User }) {
     if (c.length === 6) navigate(`/r/${c}`);
   }
 
+  const roomsFirst = loadFailed || rooms === null || rooms.length > 0;
+  const yourRooms = (
+    <section className="stack-sm">
+      <h2 className="h2">Your rooms</h2>
+      {loadFailed ? (
+        <div className="alert" role="alert">
+          <p>Couldn’t load your rooms. Check your connection and try again.</p>
+          <button className="btn btn-sm" onClick={loadRooms}>Try again</button>
+        </div>
+      ) : rooms === null ? (
+        <ul className="room-list" aria-busy="true" aria-label="Loading your rooms">
+          {[60, 44].map((w) => (
+            <li key={w} className="room-link" aria-hidden>
+              <span className="skeleton skeleton-text" style={{ '--w': `${w}%` } as React.CSSProperties} />
+            </li>
+          ))}
+        </ul>
+      ) : rooms.length === 0 ? (
+        <p className="muted">No rooms yet. Start one above, or ask a friend for their room code.</p>
+      ) : (
+        <ul className="room-list">
+          {rooms.map((r) => (
+            <li key={r.id}>
+              <Link to={`/r/${r.code}`} className="room-link">
+                <span className="room-link-name">{r.name}</span>
+                <span className="room-link-code">{r.code}</span>
+                {r.owner_id === user.id ? (
+                  <span className="pill">Owner</span>
+                ) : !r.joined ? (
+                  <span className="pill pill-accent">Invited</span>
+                ) : null}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+
   return (
     <div className="stack-lg">
       <section className="home-hero">
@@ -57,10 +107,12 @@ export default function Home({ user }: { user: User }) {
         <h1 className="display">Where do your noses agree?</h1>
       </section>
 
+      {/* Returning people come for their rooms, so those lead. New people get the forms first. */}
+      {roomsFirst && yourRooms}
       <section className="home-grid">
         <form className="card stack-sm" onSubmit={createRoom}>
           <h2 className="h2">Start a room</h2>
-          <p className="muted small">You’ll be the owner and can invite friends by email.</p>
+          <p className="muted small">You’ll be the owner. Friends join with the room’s link or code.</p>
           <label className="label" htmlFor="room-name">Room name</label>
           <input
             id="room-name"
@@ -93,30 +145,7 @@ export default function Home({ user }: { user: User }) {
         </form>
       </section>
 
-      <section className="stack-sm">
-        <h2 className="h2">Your rooms</h2>
-        {rooms === null ? (
-          <p className="muted">Loading…</p>
-        ) : rooms.length === 0 ? (
-          <p className="muted">No rooms yet. Create one above, or ask a friend to invite {user.email}.</p>
-        ) : (
-          <ul className="room-list">
-            {rooms.map((r) => (
-              <li key={r.id}>
-                <Link to={`/r/${r.code}`} className="room-link">
-                  <span className="room-link-name">{r.name}</span>
-                  <span className="mono muted small">{r.code}</span>
-                  {r.owner_id === user.id ? (
-                    <span className="pill">Owner</span>
-                  ) : !r.joined ? (
-                    <span className="pill pill-accent">Invited</span>
-                  ) : null}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {!roomsFirst && yourRooms}
     </div>
   );
 }
