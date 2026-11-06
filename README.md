@@ -14,7 +14,7 @@ Vite + React + TypeScript, plain CSS, Supabase (Postgres, Auth, Realtime), deplo
 - The owner can switch off *"Anyone with the code can join"* to make the room invite-only. Then everyone not on the list sees *"You're not invited to this room — ask the owner to add &lt;their email&gt;"*.
 - Either way people are signed in, so their tiers are saved to their account and follow them across devices.
 - All of this is enforced by **Row Level Security** in Postgres (`auth.uid()` / `auth.email()`), not just hidden in the UI. In an invite-only room, knowing the code is not enough.
-- Members read and write only in rooms they belong to, and you can only change *your own* rankings. Any member can add a fragrance, edit its details, or remove it for everyone. Only the owner can manage invites or delete the room.
+- Members read and write only in rooms they belong to, and you can only change *your own* rankings. Any member can add a fragrance or edit its details. Only the owner can remove a fragrance for everyone (even one a member added themselves), manage invites or delete the room.
 - Removing someone's invite cuts their access immediately and deletes their membership and rankings in that room. The UI asks you to confirm first. While code joining is on, they could rejoin with the code, so turn it off first if you want someone out for good.
 
 ## Local development
@@ -36,7 +36,7 @@ npm test                     # overlap math, catalog, RLS, migration and backfil
    - **Secret** key (`sb_secret_…`, or the legacy **service_role** key) → `SUPABASE_SERVICE_ROLE_KEY` (scripts only; never expose it in the browser or prefix it with `VITE_`)
 
 ### 2. Run the migration
-Open **SQL Editor → New query**, paste the whole of `supabase/migrations/001_init.sql`, and click **Run**. Then do the same with `002_join_by_code.sql` and `003_fragrance_details.sql`. Run the migration files in number order.
+Open **SQL Editor → New query**, paste the whole of `supabase/migrations/001_init.sql`, and click **Run**. Then do the same with `002_join_by_code.sql`, `003_fragrance_details.sql` and `004_owner_only_remove.sql`. Run the migration files in number order.
 (Or with the Supabase CLI: `supabase link --project-ref <ref> && supabase db push`.)
 
 This creates the tables, constraints, RLS policies and the `create_room` function, and adds `members`, `fragrances` and `rankings` to the `supabase_realtime` publication. To confirm, check **Database → Publications → supabase_realtime** for those three tables.
@@ -76,7 +76,7 @@ Email magic links work out of the box (the **Email** provider is enabled by defa
 ```bash
 npm run verify-rls
 ```
-This creates two throwaway users. One builds a room; the other, signed in with the public anon key exactly as a browser would be, tries to read and write it. The script checks that an outsider can't see the room, fragrances, rankings, members or invites, and can't join or invite themselves. It also checks that access works after an invite and disappears after an uninvite. Then it deletes everything it created. It needs `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`.
+This creates two throwaway users. One builds a room; the other, signed in with the public anon key exactly as a browser would be, tries to read and write it. The script checks that an outsider can't see the room, fragrances, rankings, members or invites, and can't join or invite themselves. It also checks that access works after an invite and disappears after an uninvite, and that a member can't remove a fragrance. Then it deletes everything it created. It needs `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`.
 
 `npm test` also runs these policies offline: `src/lib/rls.test.ts` loads the real migration into [PGlite](https://pglite.dev) (Postgres compiled to WASM) with a small stand-in for Supabase's `auth` schema.
 
@@ -90,8 +90,10 @@ This creates a "Demo Sniff Club" with 4 fake members (Ana, Ken, Mia, Leo), 13 fr
 
 Follow this order. **The new frontend inserts columns that only exist after 003, so adding a fragrance fails if the frontend is deployed first.** Migration 003 is additive and harmless to the old frontend, so applying it early is safe.
 
+Migrations 003 and 004 are independent of each other and can go in either order, but both go before the frontend deploy. 004 changes one policy and no data: only the owner can remove a fragrance. Until the new frontend is live, a member who tries to remove a bottle on the old one sees it vanish and "Saved", then sees it return on reload. Nothing is lost.
+
 1. **Back up.** `npm run backup` writes every table to `exports/backup-<time>/` (gitignored; it contains emails, so keep it private). It only reads.
-2. **Apply 003.** Paste `supabase/migrations/003_fragrance_details.sql` into the Supabase SQL Editor and click **Run**. It's safe to run twice. Check that a fragrance row now has the new columns.
+2. **Apply 003 and 004.** Paste `supabase/migrations/003_fragrance_details.sql` into the Supabase SQL Editor and click **Run**, then do the same with `004_owner_only_remove.sql`. Both are safe to run twice. Check that a fragrance row now has the new columns.
 3. **Deploy the frontend.**
 4. **Plan.** Take a fresh backup, then build the plan from it. This reads files only and never connects to a database:
    ```bash
@@ -121,13 +123,14 @@ To rebuild it, download the CSV (kept out of git) and run `npm run build-catalog
 ## Security notes
 - The anon key is public by design. RLS is what protects the data, and every table has it enabled with no access for signed-out users.
 - With code joining **on**, the room code works like a password: anyone with an account who has the code can join. A code has about a billion possible values, so guessing one is impractical, but don't post it publicly. With code joining **off**, the invite list is the only way in, and a leaked link is useless to anyone whose email isn't on it.
-- Anyone you invite can add fragrances, remove them for everyone, and see everyone's rankings and display names. Only the owner sees members' email addresses in the UI. The data itself is still readable by any member through the API, because members can select the `members` table. Invite people you trust.
+- Anyone you invite can add and edit fragrances, and see everyone's rankings and display names. Only the owner can remove a fragrance. Only the owner sees members' email addresses in the UI. The data itself is still readable by any member through the API, because members can select the `members` table. Invite people you trust.
 - Supabase Realtime can't filter `DELETE` events by room. Signed-in users may receive bare primary-key IDs (UUIDs, no content) of rows deleted in other rooms. The app ignores IDs it doesn't recognise.
 
 ## Project layout
 ```
 supabase/migrations/001_init.sql  schema, constraints, RLS, create_room(), realtime
 supabase/migrations/003_*.sql     perfumers, accords, note pyramid, release year
+supabase/migrations/004_*.sql     only the owner can remove a fragrance
 scripts/seed.ts                   demo room (flag + service key)
 scripts/verify-rls.ts             live RLS check
 scripts/backup.ts                 read-only full JSON backup

@@ -1,4 +1,4 @@
-// The backfill, run for real against migrations 001-003 in PGlite. Never touches Supabase.
+// Migrations 003 and 004 and the backfill, run for real in PGlite. Never touches Supabase.
 import { PGlite } from '@electric-sql/pglite';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -44,7 +44,7 @@ async function as<T>(db: PGlite, user: typeof OWNER, fn: (q: PGlite['query']) =>
 async function seededOldDatabase() {
   const db = new PGlite();
   await db.exec(SHIM);
-  for (const f of migrations.filter((m) => !m.startsWith('003'))) await db.exec(sql(f));
+  for (const f of migrations.filter((m) => /^00[12]_/.test(m))) await db.exec(sql(f));
   for (const u of [OWNER, FRIEND, STRANGER]) await db.query('insert into auth.users (id, email) values ($1, $2)', [u.id, u.email]);
   const room = await as(db, OWNER, (q) => q<{ id: string; code: string }>(`select * from public.create_room('Sniff Club', 'Olivia')`));
   const roomId = room.rows[0].id;
@@ -188,6 +188,97 @@ describe('migration 003', () => {
     await ctx.db.exec(sql('003_fragrance_details.sql'));
     await expect(ctx.db.query(`update public.fragrances set release_year = 20244 where id = $1`, [ctx.ids['Chamo']]))
       .rejects.toThrow(/check constraint/);
+  });
+});
+
+describe('migration 004: owner-only remove', () => {
+  const OWNER_ONLY = '004_owner_only_remove.sql';
+  let ctx: Awaited<ReturnType<typeof seededOldDatabase>>;
+  const exists = async (id: string) => (await ctx.db.query('select 1 from public.fragrances where id = $1', [id])).rows.length === 1;
+  const rankings = async (id: string) =>
+    (await ctx.db.query<{ n: number }>('select count(*)::int as n from public.rankings where fragrance_id = $1', [id])).rows[0].n;
+  const remove = (user: typeof OWNER, id: string) =>
+    as(ctx.db, user, (q) => q<{ id: string }>('delete from public.fragrances where id = $1 returning id', [id]));
+
+  beforeEach(async () => {
+    ctx = await seededOldDatabase();
+  });
+
+  it('closes a real gap: before it, a member could remove a fragrance', async () => {
+    const r = await remove(FRIEND, ctx.ids['Chamo']);
+    expect(r.rows).toHaveLength(1);
+  });
+
+  it('the owner can remove, gets the row back, and all its rankings go with it', async () => {
+    await ctx.db.exec(sql(OWNER_ONLY));
+    const r = await remove(OWNER, ctx.ids['Chamo']);
+    expect(r.rows).toEqual([{ id: ctx.ids['Chamo'] }]);
+    expect(await exists(ctx.ids['Chamo'])).toBe(false);
+    expect(await rankings(ctx.ids['Chamo'])).toBe(0);
+  });
+
+  it('a member gets 0 rows and no error, and the row and its rankings survive', async () => {
+    await ctx.db.exec(sql(OWNER_ONLY));
+    const r = await remove(FRIEND, ctx.ids['Chamo']);
+    expect(r.rows).toEqual([]);
+    expect(await exists(ctx.ids['Chamo'])).toBe(true);
+    expect(await rankings(ctx.ids['Chamo'])).toBe(2);
+  });
+
+  it('a member cannot remove a bottle they added themselves', async () => {
+    await ctx.db.exec(sql(OWNER_ONLY));
+    const added = await as(ctx.db, FRIEND, async (q) => {
+      const me = await q<{ id: string }>('select id from public.members where user_id = auth.uid()');
+      return q<{ id: string }>(
+        `insert into public.fragrances (room_id, name, house, added_by) values ($1, 'Mine', 'House', $2) returning id`,
+        [ctx.roomId, me.rows[0].id],
+      );
+    });
+    const id = added.rows[0].id;
+    expect((await remove(FRIEND, id)).rows).toEqual([]);
+    expect(await exists(id)).toBe(true);
+  });
+
+  it('an outsider cannot remove anything', async () => {
+    await ctx.db.exec(sql(OWNER_ONLY));
+    expect((await remove(STRANGER, ctx.ids['Chamo'])).rows).toEqual([]);
+    expect(await exists(ctx.ids['Chamo'])).toBe(true);
+    expect(await rankings(ctx.ids['Chamo'])).toBe(2);
+  });
+
+  it('members keep add and edit, on the original columns and the new ones', async () => {
+    await ctx.db.exec(sql('003_fragrance_details.sql'));
+    await ctx.db.exec(sql(OWNER_ONLY));
+    await as(ctx.db, FRIEND, (q) => q(`insert into public.fragrances (room_id, name, house, accords) values ($1, 'New', 'House', '{woody}')`, [ctx.roomId]));
+    const r = await as(ctx.db, FRIEND, (q) => q(`update public.fragrances set notes = '{moss,oud}', accords = '{green}' where id = $1`, [ctx.ids['Chamo']]));
+    expect(r.affectedRows).toBe(1);
+  });
+
+  it('changes no data, is safe to run twice, and leaves exactly one delete policy', async () => {
+    const before = [await allTables(ctx.db), await liveRows(ctx.db)];
+    await ctx.db.exec(sql(OWNER_ONLY));
+    await ctx.db.exec(sql(OWNER_ONLY));
+    expect([await allTables(ctx.db), await liveRows(ctx.db)]).toEqual(before);
+    const policies = await ctx.db.query<{ qual: string }>(
+      `select qual from pg_policies where tablename = 'fragrances' and cmd = 'DELETE'`,
+    );
+    expect(policies.rows).toHaveLength(1);
+    expect(policies.rows[0].qual).toMatch(/is_room_owner/);
+  });
+
+  it('leaves the insert and update policies as they were', async () => {
+    const others = () => ctx.db.query(`select policyname, cmd, qual, with_check from pg_policies where tablename = 'fragrances' and cmd <> 'DELETE' order by 1`);
+    const before = (await others()).rows;
+    await ctx.db.exec(sql(OWNER_ONLY));
+    expect((await others()).rows).toEqual(before);
+  });
+
+  it('is independent of 003: 004 first works too', async () => {
+    await ctx.db.exec(sql(OWNER_ONLY));
+    await ctx.db.exec(sql('003_fragrance_details.sql'));
+    expect((await remove(FRIEND, ctx.ids['Chamo'])).rows).toEqual([]);
+    const r = await as(ctx.db, FRIEND, (q) => q(`update public.fragrances set accords = '{green}' where id = $1`, [ctx.ids['Chamo']]));
+    expect(r.affectedRows).toBe(1);
   });
 });
 

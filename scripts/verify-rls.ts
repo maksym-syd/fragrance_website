@@ -92,6 +92,9 @@ async function main() {
     check('code join works when the owner allows it', !open.error, open.error?.message);
     const { data: viaCode } = await outsider.from('fragrances').select('*').eq('room_id', room.id);
     check('after code join: can read fragrances', viaCode!.length === 1);
+    const removed = await outsider.from('fragrances').delete().eq('id', frag.id).select();
+    const { data: kept } = await owner.from('fragrances').select('id').eq('id', frag.id);
+    check('member cannot remove a fragrance', removed.data?.length === 0 && kept!.length === 1, removed.error?.message);
 
     await admin.from('rooms').delete().eq('id', room.id);
   } finally {

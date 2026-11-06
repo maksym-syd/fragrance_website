@@ -154,29 +154,31 @@ export default function TierSheet({ api, fragrance, onClose }: { api: RoomApi; f
               </div>
             )}
 
-            <div className="sheet-danger">
-              {confirmRemove ? (
-                <div className="confirm" role="alertdialog">
-                  <p className="confirm-prompt">
-                    Remove <strong>{fragrance.name}</strong> from the room? Everyone’s rankings of it are deleted too.
-                  </p>
-                  <div className="confirm-actions">
-                    <button className="btn btn-ghost btn-sm" onClick={() => setConfirmRemove(false)}>Keep it</button>
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={() => {
-                        api.removeFragrance(fragrance.id);
-                        onClose();
-                      }}
-                    >
-                      Remove for everyone
-                    </button>
+            {api.isOwner && (
+              <div className="sheet-danger">
+                {confirmRemove ? (
+                  <div className="confirm" role="alertdialog">
+                    <p className="confirm-prompt">
+                      Remove <strong>{fragrance.name}</strong> from the room? Everyone’s rankings of it are deleted too.
+                    </p>
+                    <div className="confirm-actions">
+                      <button className="btn btn-ghost btn-sm" onClick={() => setConfirmRemove(false)}>Keep it</button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => {
+                          api.removeFragrance(fragrance.id);
+                          onClose();
+                        }}
+                      >
+                        Remove for everyone
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <button className="btn-link danger" onClick={() => setConfirmRemove(true)}>Remove for everyone…</button>
-              )}
-            </div>
+                ) : (
+                  <button className="btn-link danger" onClick={() => setConfirmRemove(true)}>Remove for everyone…</button>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>

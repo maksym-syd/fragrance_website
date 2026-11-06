@@ -271,16 +271,23 @@ export function useRoom(code: string, user: User) {
     [data.fragrances, track],
   );
 
+  /** Owner only, enforced by RLS. A blocked delete is 0 rows and no error, so count what came back. */
   const removeFragrance = useCallback(
     async (id: string) => {
+      if (!isOwner) return { ok: false, message: 'Only the room owner can remove a fragrance' };
       setData((d) => ({
         ...d,
         fragrances: d.fragrances.filter((x) => x.id !== id),
         rankings: d.rankings.filter((x) => x.fragrance_id !== id),
       }));
-      return track(() => db().from('fragrances').delete().eq('id', id));
+      return track<Fragrance[]>(async () => {
+        const res = await db().from('fragrances').delete().eq('id', id).select();
+        if (res.error || res.data.length > 0) return res;
+        // Reported as a failure so track() shows it and reloads, bringing the bottle back.
+        return { data: null, error: { message: 'Could not remove that fragrance' } as PostgrestError };
+      });
     },
-    [track],
+    [isOwner, track],
   );
 
   const join = useCallback(
