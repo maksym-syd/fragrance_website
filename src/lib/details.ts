@@ -18,6 +18,8 @@ export interface Draft {
   other: string[];
 }
 
+export type TokenKey = 'perfumers' | 'accords' | 'top' | 'heart' | 'base' | 'other';
+
 export const EMPTY_DRAFT: Draft = {
   name: '', house: '', concentration: '', year: '', perfumers: [], accords: [], top: [], heart: [], base: [], other: [],
 };
@@ -80,6 +82,16 @@ export const validYear = (text: string) => {
   if (!text.trim()) return true;
   return /^\d{4}$/.test(text.trim()) && Number(text) >= 1700 && Number(text) <= 2100;
 };
+
+/** Adds text left in token inputs, so nothing typed is dropped on submit. */
+export function withPending(d: Draft, pending: Partial<Record<TokenKey, string>>): Draft {
+  const next = { ...d };
+  for (const [key, text] of Object.entries(pending) as Array<[TokenKey, string]>) {
+    const t = text.trim();
+    if (t) next[key] = unique(d[key], [t]);
+  }
+  return next;
+}
 
 export function draftToFragrance(d: Draft): FragrancePatch {
   const clean = (list: string[]) => unique(list.map(normalizeNote).filter(Boolean));

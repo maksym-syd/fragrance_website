@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { accordOverlap, indexRankings, noteOverlap } from './overlap';
 import { buildCatalog, type CatalogEntry } from './catalog';
 import {
-  applyEntry, draftFromFragrance, draftToFragrance, EMPTY_DRAFT, nameOptions, otherNotes, popularEntries, quickAddDetail, roomVocab, validYear,
+  applyEntry, draftFromFragrance, draftToFragrance, EMPTY_DRAFT, nameOptions, otherNotes, popularEntries, quickAddDetail, roomVocab, validYear, withPending,
 } from './details';
 import { splitNotes } from './reference';
 import type { Fragrance } from './types';
@@ -52,6 +52,12 @@ describe('draft conversions', () => {
     const once = applyEntry({ ...EMPTY_DRAFT, other: ['typed'] }, first, null);
     const twice = applyEntry(once, second, first);
     expect(twice).toMatchObject({ top: ['fig'], other: ['typed'], accords: ['green'], perfumers: ['P2'] });
+  });
+
+  it('keeps text left in a token input when the form is submitted', () => {
+    const d = withPending({ ...EMPTY_DRAFT, base: ['musk'] }, { base: ' smoke ', top: '  ', perfumers: 'A Name' });
+    expect(d).toMatchObject({ base: ['musk', 'smoke'], top: [], perfumers: ['A Name'] });
+    expect(draftToFragrance(withPending(EMPTY_DRAFT, { other: 'Smoke' })).notes).toEqual(['smoke']);
   });
 
   it('otherNotes leaves out what the pyramid places', () => {

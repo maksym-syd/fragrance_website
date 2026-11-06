@@ -1,6 +1,6 @@
 # Scent Tiers
 
-A shared fragrance tier list for a group of friends. The point is to show **where your tastes overlap and differ**: taste-match %, a similarity map, unanimous favourites, the most divisive bottles, note-level preferences and "try next" picks from your closest match.
+A shared fragrance tier list for a group of friends. The point is to show **where your tastes overlap and differ**: taste-match %, a similarity map, unanimous favourites, the most divisive bottles, note- and accord-level preferences and "try next" picks from your closest match.
 
 Vite + React + TypeScript, plain CSS, Supabase (Postgres, Auth, Realtime), deployed on Vercel. All free tiers.
 
@@ -14,7 +14,7 @@ Vite + React + TypeScript, plain CSS, Supabase (Postgres, Auth, Realtime), deplo
 - The owner can switch off *"Anyone with the code can join"* to make the room invite-only. Then everyone not on the list sees *"You're not invited to this room — ask the owner to add &lt;their email&gt;"*.
 - Either way people are signed in, so their tiers are saved to their account and follow them across devices.
 - All of this is enforced by **Row Level Security** in Postgres (`auth.uid()` / `auth.email()`), not just hidden in the UI. In an invite-only room, knowing the code is not enough.
-- Members read and write only in rooms they belong to, and you can only change *your own* rankings. Any member can add a fragrance or remove one for everyone. Only the owner can manage invites or delete the room.
+- Members read and write only in rooms they belong to, and you can only change *your own* rankings. Any member can add a fragrance, edit its details, or remove it for everyone. Only the owner can manage invites or delete the room.
 - Removing someone's invite cuts their access immediately and deletes their membership and rankings in that room. The UI asks you to confirm first. While code joining is on, they could rejoin with the code, so turn it off first if you want someone out for good.
 
 ## Local development
@@ -23,7 +23,7 @@ Vite + React + TypeScript, plain CSS, Supabase (Postgres, Auth, Realtime), deplo
 npm install
 cp .env.example .env.local   # fill in values from step 1 below
 npm run dev                  # http://localhost:5173
-npm test                     # overlap math + RLS policy tests (offline, no Supabase needed)
+npm test                     # overlap math, catalog, RLS, migration and backfill tests (offline, no Supabase needed)
 ```
 
 ## Setup and deploy
@@ -36,7 +36,7 @@ npm test                     # overlap math + RLS policy tests (offline, no Supa
    - **Secret** key (`sb_secret_…`, or the legacy **service_role** key) → `SUPABASE_SERVICE_ROLE_KEY` (scripts only; never expose it in the browser or prefix it with `VITE_`)
 
 ### 2. Run the migration
-Open **SQL Editor → New query**, paste the whole of `supabase/migrations/001_init.sql`, and click **Run**. Then do the same with `002_join_by_code.sql`. Run the migration files in number order.
+Open **SQL Editor → New query**, paste the whole of `supabase/migrations/001_init.sql`, and click **Run**. Then do the same with `002_join_by_code.sql` and `003_fragrance_details.sql`. Run the migration files in number order.
 (Or with the Supabase CLI: `supabase link --project-ref <ref> && supabase db push`.)
 
 This creates the tables, constraints, RLS policies and the `create_room` function, and adds `members`, `fragrances` and `rankings` to the `supabase_realtime` publication. To confirm, check **Database → Publications → supabase_realtime** for those three tables.
@@ -86,6 +86,38 @@ npm run seed -- --yes --invite you@example.com
 ```
 This creates a "Demo Sniff Club" with 4 fake members (Ana, Ken, Mia, Leo), 13 fragrances and ~38 rankings, and invites your email. Open the printed `/r/CODE`, join, and look at **Overlap**. The fake members are confirmed auth users at `@example.com` addresses with no password, so they can't sign in. You can delete them under **Authentication → Users**. It requires the `--yes` flag and the service role key.
 
+## Upgrading a live site to fragrance details
+
+Follow this order. **The new frontend inserts columns that only exist after 003, so adding a fragrance fails if the frontend is deployed first.** Migration 003 is additive and harmless to the old frontend, so applying it early is safe.
+
+1. **Back up.** `npm run backup` writes every table to `exports/backup-<time>/` (gitignored; it contains emails, so keep it private). It only reads.
+2. **Apply 003.** Paste `supabase/migrations/003_fragrance_details.sql` into the Supabase SQL Editor and click **Run**. It's safe to run twice. Check that a fragrance row now has the new columns.
+3. **Deploy the frontend.**
+4. **Plan.** Take a fresh backup, then build the plan from it. This reads files only and never connects to a database:
+   ```bash
+   npm run backup
+   npm run backfill -- --input exports/backup-<time>/fragrances.json --csv /path/to/parfumo.csv
+   ```
+   It writes `exports/backfill-plan.json` and `exports/backfill-plan.md`. [`docs/backfill-plan.md`](docs/backfill-plan.md) is a copy made from a sanitized snapshot, for reading ahead.
+5. **Review.** Read the markdown. *Auto-matched* rows are exact name and house matches. *Needs review* rows are not applied from the source unless you set `"approved_candidate": <candidate number>` on the row in the JSON. *Unmatched* rows stay empty for members to fill in. House spellings, listed typos and accord words are fixed on every row, from the reviewed maps in `src/lib/reference.ts`.
+6. **Apply.** Rehearse first; without `--no-dry-run` nothing is written:
+   ```bash
+   npm run backfill -- --apply --plan-file exports/backfill-plan.json
+   npm run backfill -- --apply --plan-file exports/backfill-plan.json --no-dry-run
+   ```
+   The real run needs `SUPABASE_SERVICE_ROLE_KEY`. It takes a fresh backup and stops if that fails. It skips any row that changed since the plan, updates only `fragrances`, by id, and never deletes. It then checks that the row counts of all five tables and a hash of the rankings are identical before and after. To undo it, paste `exports/backfill-rollback-<time>.sql` into the SQL Editor; that restores only the columns it changed. If members edited those rows after the run, the rollback overwrites their edits.
+
+## Reference catalog
+
+Autocomplete comes from a static file, `public/catalog/catalog-<hash>.json` (about 42,000 fragrances, 3.2 MB raw, 0.9 MB gzipped). It's fetched only on the Add and edit screens and is never in the JS bundle. If it fails to load, every field still works as plain text.
+
+To rebuild it, download the CSV (kept out of git) and run `npm run build-catalog -- /path/to/parfumo.csv`. The filename changes with the content, so it can be cached forever.
+
+- **What's in it:** every fragrance row with at least a rating, accord, note or perfumer. After shaves, hair and body products, solids and the like are excluded. Bare name-only rows are dropped because they can't fill anything in. Rating count isn't a threshold, because the source has no count for many of the most famous bottles (Aventus, Sauvage).
+- **Limits:** it stops at 2024, and 961 of its 1,452 brands are cut off at exactly 20 rows, so a house being present doesn't mean its bottles are (Lattafa stops before Khamrah). Some houses are missing altogether, and many bottles have accords but no pyramid. Suggestions therefore also draw on what's in the room, and free text always works.
+- **Attribution:** data from [Parfumo](https://www.parfumo.com/), scraped and published on [Kaggle](https://www.kaggle.com/datasets/olgagmiufana1/parfumo-fragrance-dataset) by Olga G., curated by Nicolas Foss for [TidyTuesday 2024-12-10](https://github.com/rfordatascience/tidytuesday/tree/main/data/2024/2024-12-10). The add form credits Parfumo and TidyTuesday.
+- **Licence:** the TidyTuesday repository is CC0 1.0, but its page for this dataset states no licence for the data itself, and CC0 can only waive rights the repository's authors hold. It doesn't grant anything over Parfumo's content. Check Parfumo's terms and the Kaggle dataset's licence before relying on this data for anything beyond a private friend group.
+
 ## Security notes
 - The anon key is public by design. RLS is what protects the data, and every table has it enabled with no access for signed-out users.
 - With code joining **on**, the room code works like a password: anyone with an account who has the code can join. A code has about a billion possible values, so guessing one is impractical, but don't post it publicly. With code joining **off**, the invite list is the only way in, and a leaked link is useless to anyone whose email isn't on it.
@@ -95,13 +127,21 @@ This creates a "Demo Sniff Club" with 4 fake members (Ana, Ken, Mia, Leo), 13 fr
 ## Project layout
 ```
 supabase/migrations/001_init.sql  schema, constraints, RLS, create_room(), realtime
+supabase/migrations/003_*.sql     perfumers, accords, note pyramid, release year
 scripts/seed.ts                   demo room (flag + service key)
 scripts/verify-rls.ts             live RLS check
+scripts/backup.ts                 read-only full JSON backup
+scripts/build-catalog.ts          Parfumo CSV -> public/catalog/
+scripts/backfill-details.ts       plan, then apply, fragrance details (logic in scripts/lib/)
 src/lib/overlap.ts                pure scoring math (+ overlap.test.ts)
+src/lib/catalog.ts                catalog loader and search
+src/lib/reference.ts              reviewed house, typo and accord maps
+src/lib/details.ts                form, catalog and row conversions
 src/lib/rls.test.ts               RLS policy tests in PGlite
+src/lib/backfill.test.ts          migration and backfill tests in PGlite
 src/hooks/useRoom.ts              room data, realtime subscription, optimistic writes
 src/pages/                        SignIn, Home, Room (+ not-invited and join screens)
-src/components/                   MyTiers (dnd-kit), TierSheet, Overlap, AddFragrance, MembersPanel, ExportBoard
+src/components/                   MyTiers (dnd-kit), TierSheet, Overlap, AccordsSection, AddFragrance, FragranceForm, Combobox, TokenInput, MembersPanel, ExportBoard
 ```
 
 ## Scoring
@@ -111,3 +151,4 @@ Tiers count as S=5, A=4, B=3, C=2, D=1; no ranking means "haven't tried".
 - **Most divisive:** highest minus lowest tier ≥ 3.
 - **Try next:** fragrances you haven't ranked that your closest match rated S or A.
 - **By note:** each person's average tier across fragrances carrying that note tag.
+- **By accord:** the same, per accord.

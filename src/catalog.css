@@ -69,3 +69,6 @@
 .details { display: grid; gap: 10px; }
 .detail-row { display: grid; gap: 4px; }
 .details .btn-link { justify-self: start; }
+
+/* A field with chips is taller than its neighbour; don't stretch the neighbour to match. */
+form .form-grid { align-items: start; }

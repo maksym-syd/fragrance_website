@@ -2,8 +2,8 @@ import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { useCatalog } from '../hooks/useCatalog';
 import { searchCatalog, suggestTerms, type CatalogEntry } from '../lib/catalog';
 import {
-  applyEntry, draftToFragrance, EMPTY_DRAFT, nameOptions, popularEntries, roomVocab, validYear,
-  type Draft, type NameOption,
+  applyEntry, draftToFragrance, EMPTY_DRAFT, nameOptions, popularEntries, roomVocab, validYear, withPending,
+  type Draft, type NameOption, type TokenKey,
 } from '../lib/details';
 import { dedupeKey } from '../lib/normalize';
 import { POPULAR } from '../lib/popular';
@@ -43,6 +43,7 @@ function describe(e: CatalogEntry) {
 export default function FragranceForm({ idPrefix, fragrances, initial = EMPTY_DRAFT, editingId, submitLabel, busyLabel, onSubmit, onOpen, onCancel }: Props) {
   const { catalog, status } = useCatalog();
   const [draft, setDraft] = useState<Draft>(initial);
+  const [pending, setPending] = useState<Partial<Record<TokenKey, string>>>({});
   const [busy, setBusy] = useState(false);
   const lastPick = useRef<CatalogEntry | null>(null);
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => ({ ...d, [key]: value }));
@@ -82,22 +83,29 @@ export default function FragranceForm({ idPrefix, fragrances, initial = EMPTY_DR
     e.preventDefault();
     if (!named || isDuplicate || !yearOk) return;
     setBusy(true);
-    const ok = await onSubmit(draftToFragrance(draft));
+    const ok = await onSubmit(draftToFragrance(withPending(draft, pending)));
     setBusy(false);
     if (ok && !editingId) {
       setDraft(EMPTY_DRAFT);
+      setPending({});
       lastPick.current = null;
     }
   }
+
+  const tokenProps = (key: TokenKey) => ({
+    id: `${idPrefix}-${key}`,
+    tokens: draft[key],
+    onChange: (v: string[]) => set(key, v),
+    text: pending[key] ?? '',
+    onTextChange: (text: string) => setPending((p) => ({ ...p, [key]: text })),
+  });
 
   const tokenField = (key: 'accords' | 'top' | 'heart' | 'base' | 'other', label: string, placeholder: string) => {
     const isAccord = key === 'accords';
     return (
       <TokenInput
-        id={`${idPrefix}-${key}`}
+        {...tokenProps(key)}
         label={label}
-        tokens={draft[key]}
-        onChange={(v) => set(key, v)}
         suggest={(q, chosen) => suggestTerms(
           q,
           isAccord ? vocab.accords : vocab.notes,
@@ -191,10 +199,8 @@ export default function FragranceForm({ idPrefix, fragrances, initial = EMPTY_DR
           {!yearOk && <p className="error small">Use a four-digit year.</p>}
         </div>
         <TokenInput
-          id={`${idPrefix}-perfumers`}
+          {...tokenProps('perfumers')}
           label="Perfumers · optional"
-          tokens={draft.perfumers}
-          onChange={(v) => set('perfumers', v)}
           suggest={(q, chosen) => suggestTerms(q, vocab.perfumers, catalog?.perfumers ?? [], chosen)}
           placeholder="Add a name"
           lowercase={false}

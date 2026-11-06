@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from 'react';
+import type { KeyboardEvent } from 'react';
 import Combobox from './Combobox';
 
 interface Props {
@@ -6,6 +6,9 @@ interface Props {
   label: string;
   tokens: string[];
   onChange: (tokens: string[]) => void;
+  /** Typed but not yet a chip. The form owns it and includes it on submit. */
+  text: string;
+  onTextChange: (text: string) => void;
   /** Suggestions for the text so far, leaving out what's already chosen. */
   suggest: (query: string, chosen: string[]) => string[];
   placeholder?: string;
@@ -13,9 +16,12 @@ interface Props {
   lowercase?: boolean;
 }
 
-/** Chips plus a combobox. Enter or a comma adds what you typed, suggested or not. */
-export default function TokenInput({ id, label, tokens, onChange, suggest, placeholder, lowercase = true }: Props) {
-  const [text, setText] = useState('');
+/**
+ * Chips plus a combobox. Enter or a comma adds what you typed, suggested or not. Leaving the
+ * field does not: a new chip would shift the layout between mousedown and mouseup on the
+ * submit button and swallow the click. The form picks up leftover text when it submits.
+ */
+export default function TokenInput({ id, label, tokens, onChange, text, onTextChange, suggest, placeholder, lowercase = true }: Props) {
   const tidy = (s: string) => {
     const t = s.trim().replace(/\s+/g, ' ');
     return lowercase ? t.toLowerCase() : t;
@@ -24,13 +30,13 @@ export default function TokenInput({ id, label, tokens, onChange, suggest, place
     const next = [...tokens];
     for (const v of values.map(tidy)) if (v && !next.includes(v)) next.push(v);
     onChange(next);
-    setText('');
+    onTextChange('');
   };
 
   function onValueChange(value: string) {
     // Covers pasted lists, and phone keyboards where keydown doesn't report the comma.
     if (/[,;\n]/.test(value)) add(value.split(/[,;\n]/));
-    else setText(value);
+    else onTextChange(value);
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
@@ -68,7 +74,6 @@ export default function TokenInput({ id, label, tokens, onChange, suggest, place
             }
           }}
           onKeyDown={onKeyDown}
-          onBlur={() => text.trim() && add([text])}
           placeholder={placeholder}
           enterKeyHint="enter"
         />
