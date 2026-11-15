@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { FOCUSABLE, trapTarget } from '../lib/focus';
 import type { Tier } from '../lib/types';
 
@@ -107,35 +107,52 @@ export function CopyButton({ text, label = 'Copy', className = 'btn btn-ghost bt
   );
 }
 
-/** Two-step destructive button: first click arms it, second click confirms. Never window.confirm. */
+/**
+ * Two-step destructive button: first click arms it, second click confirms. Never window.confirm.
+ * Arming swaps the button for the prompt, so focus moves to the safe choice (Cancel), and goes
+ * back to the button when the prompt closes without removing the thing.
+ */
 export function ConfirmButton({
   label,
   confirmLabel,
+  cancelLabel = 'Cancel',
   prompt,
   onConfirm,
   className = 'btn btn-danger-ghost',
 }: {
   label: string;
   confirmLabel: string;
+  cancelLabel?: string;
   prompt: ReactNode;
   onConfirm: () => void | Promise<unknown>;
   className?: string;
 }) {
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const promptId = useId();
+  const armRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const wasArmed = useRef(armed);
+
+  useEffect(() => {
+    if (wasArmed.current === armed) return;
+    wasArmed.current = armed;
+    (armed ? cancelRef : armRef).current?.focus();
+  }, [armed]);
+
   if (!armed) {
     return (
-      <button type="button" className={className} onClick={() => setArmed(true)}>
+      <button ref={armRef} type="button" className={className} onClick={() => setArmed(true)}>
         {label}
       </button>
     );
   }
   return (
-    <div className="confirm" role="alertdialog" aria-live="polite">
-      <p className="confirm-prompt">{prompt}</p>
+    <div className="confirm" role="group" aria-labelledby={promptId}>
+      <p id={promptId} className="confirm-prompt">{prompt}</p>
       <div className="confirm-actions">
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setArmed(false)} disabled={busy}>
-          Cancel
+        <button ref={cancelRef} type="button" className="btn btn-ghost btn-sm" onClick={() => setArmed(false)} disabled={busy}>
+          {cancelLabel}
         </button>
         <button
           type="button"

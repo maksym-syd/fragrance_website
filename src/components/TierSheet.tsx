@@ -5,7 +5,7 @@ import { TIERS } from '../lib/overlap';
 import { TIER_LABEL } from '../lib/tiers';
 import type { Fragrance, FragrancePatch, Tier } from '../lib/types';
 import FragranceForm from './FragranceForm';
-import { TierLetter, useModal } from './ui';
+import { ConfirmButton, TierLetter, useModal } from './ui';
 
 function TagRow({ label, tags }: { label: string; tags: string[] }) {
   if (tags.length === 0) return null;
@@ -42,7 +42,6 @@ function FragranceDetails({ fragrance: f, onEdit }: { fragrance: Fragrance; onEd
 /** Bottom sheet on mobile, centered dialog on desktop. */
 export default function TierSheet({ api, fragrance, onClose }: { api: RoomApi; fragrance: Fragrance; onClose: () => void }) {
   const me = api.me!;
-  const [confirmRemove, setConfirmRemove] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -155,27 +154,17 @@ export default function TierSheet({ api, fragrance, onClose }: { api: RoomApi; f
 
             {api.isOwner && (
               <div className="sheet-danger">
-                {confirmRemove ? (
-                  <div className="confirm" role="alertdialog">
-                    <p className="confirm-prompt">
-                      Remove <strong>{fragrance.name}</strong> from the room? Everyone’s rankings of it are deleted too.
-                    </p>
-                    <div className="confirm-actions">
-                      <button className="btn btn-ghost btn-sm" onClick={() => setConfirmRemove(false)}>Keep it</button>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => {
-                          api.removeFragrance(fragrance.id);
-                          onClose();
-                        }}
-                      >
-                        Remove for everyone
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button className="btn-link danger" onClick={() => setConfirmRemove(true)}>Remove for everyone…</button>
-                )}
+                <ConfirmButton
+                  label="Remove for everyone…"
+                  confirmLabel="Remove for everyone"
+                  cancelLabel="Keep it"
+                  className="btn-link danger"
+                  prompt={<>Remove <strong>{fragrance.name}</strong> from the room? Everyone’s rankings of it are deleted too.</>}
+                  onConfirm={() => {
+                    api.removeFragrance(fragrance.id);
+                    onClose();
+                  }}
+                />
               </div>
             )}
           </>
