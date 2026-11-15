@@ -110,7 +110,9 @@ Migrations 003 and 004 are independent of each other and can go in either order,
    npm run backfill -- --apply --plan-file exports/backfill-plan.json
    npm run backfill -- --apply --plan-file exports/backfill-plan.json --no-dry-run --project=<ref>
    ```
-   The real run needs `SUPABASE_SERVICE_ROLE_KEY`. It takes a fresh backup and stops if that fails. It skips any row that changed since the plan, updates only `fragrances`, by id, and never deletes. It then checks that the row counts of all five tables and a hash of the rankings are identical before and after. To undo it, paste `exports/backfill-rollback-<time>.sql` into the SQL Editor; that restores only the columns it changed. If members edited those rows after the run, the rollback overwrites their edits.
+   The real run needs `SUPABASE_SERVICE_ROLE_KEY`. It takes a fresh backup and stops if that fails. It skips any row that changed since the plan, updates only `fragrances`, by id, and never deletes. It then checks that the row counts of all five tables and a hash of the rankings are identical before and after. To undo it, paste `exports/backfill-rollback-<time>.sql` into the SQL Editor; that restores only the columns it changed, and only on rows that still hold the backfilled values. A row a member edited after the run is left alone.
+
+   > **Do not run `exports/backfill-rollback-2026-11-06-14-40-54.sql`.** It was generated before this guard existed, so it reverts rows unconditionally and would overwrite every member edit made since 2026-11-06. If you need to undo part of that backfill, restore individual rows from the audit log (see "Applying 005 and 006") or from a backup.
 
 ## Reference catalog
 

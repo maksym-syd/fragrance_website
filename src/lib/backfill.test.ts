@@ -463,8 +463,18 @@ describe('applyPlan against a seeded copy', () => {
     expect((await liveRows(ctx.db)).sort((a, b) => a.id.localeCompare(b.id))).toEqual(before);
   });
 
+  it('the rollback leaves a row edited since the backfill alone, and still reverts the others', async () => {
+    const before = await liveRows(ctx.db);
+    await applyPlan(plan, pgliteStore(ctx.db), opts(false));
+    await as(ctx.db, FRIEND, (q) => q(`update public.fragrances set notes = '{bergamot,rose,oud}' where id = $1`, [ctx.ids['Tuxedo']]));
+    await ctx.db.exec(rollback);
+    expect(await fragrance(ctx.ids['Tuxedo'])).toMatchObject({ house: 'Yves Saint Laurent', notes: ['bergamot', 'rose', 'oud'] });
+    expect(await fragrance(ctx.ids['Luna'])).toMatchObject({ house: before.find((r) => r.id === ctx.ids['Luna'])!.house });
+    expect(await fragrance(ctx.ids['Mojave Ghost'])).toMatchObject({ release_year: null, perfumers: [] });
+  });
+
   it('survives quotes in rollback values', async () => {
-    const sqlText = rollbackSql([{ id: ctx.ids['Luna'], restore: { house: "O'Brien", notes: ["l'eau"] } }]);
+    const sqlText = rollbackSql([{ id: ctx.ids['Luna'], restore: { house: "O'Brien", notes: ["l'eau"] }, applied: { house: 'Penhaligon’s', notes: ['bergamot'] } }]);
     await ctx.db.exec(sqlText);
     expect(await fragrance(ctx.ids['Luna'])).toMatchObject({ house: "O'Brien", notes: ["l'eau"] });
   });

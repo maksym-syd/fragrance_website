@@ -291,13 +291,22 @@ function sqlValue(v: unknown): string {
   return typeof v === 'number' ? String(v) : lit(String(v));
 }
 
-/** Rollback for exactly the rows written so far, as SQL for the Supabase editor. */
-export function rollbackSql(done: Array<{ id: string; restore: Partial<Details> }>): string {
-  const lines = done.map(({ id, restore }) => {
+/**
+ * Rollback for exactly the rows written so far, as SQL for the Supabase editor. Each row is
+ * reverted only while every changed column still holds the backfilled value, so an edit a member
+ * made after the backfill is never overwritten (that row's UPDATE simply matches 0 rows).
+ */
+export function rollbackSql(done: Array<{ id: string; restore: Partial<Details>; applied: Partial<Details> }>): string {
+  const lines = done.map(({ id, restore, applied }) => {
     const sets = Object.entries(restore).map(([c, v]) => `${c} = ${sqlValue(v)}`).join(', ');
-    return `update public.fragrances set ${sets} where id = ${lit(id)};`;
+    const guards = Object.entries(applied).map(([c, v]) => ` and ${c} is not distinct from ${sqlValue(v)}`).join('');
+    return `update public.fragrances set ${sets} where id = ${lit(id)}${guards};`;
   });
-  return ['-- Restores the fragrance columns the backfill changed. Touches nothing else.', 'begin;', ...lines, 'commit;', ''].join('\n');
+  return [
+    '-- Restores the fragrance columns the backfill changed. Touches nothing else.',
+    '-- A row edited since the backfill no longer matches its WHERE clause and is left alone.',
+    'begin;', ...lines, 'commit;', '',
+  ].join('\n');
 }
 
 /**
@@ -317,7 +326,7 @@ export async function applyPlan(
   const before = await store.snapshot();
   const backup = opts.dryRun ? null : await store.backup();
   const result: ApplyResult = { dryRun: opts.dryRun, backup, updated: [], wouldUpdate: [], unchanged: [], skipped: [], failed: [], before, after: before };
-  const done: Array<{ id: string; restore: Partial<Details> }> = [];
+  const done: Array<{ id: string; restore: Partial<Details>; applied: Partial<Details> }> = [];
 
   for (const row of plan.rows) {
     const patch = patchFor(row.before, targetOf(row));
@@ -340,7 +349,7 @@ export async function applyPlan(
       continue;
     }
     const restore = Object.fromEntries(Object.keys(patch).map((c) => [c, row.before[c as keyof Details]])) as Partial<Details>;
-    done.push({ id: row.id, restore });
+    done.push({ id: row.id, restore, applied: patch });
     opts.writeRollback(rollbackSql(done));
     try {
       const n = await store.update(row.id, patch, { name: row.before.name, house: row.before.house });
