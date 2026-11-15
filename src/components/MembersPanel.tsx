@@ -179,6 +179,7 @@ function InviteManager({ api }: { api: RoomApi }) {
 
 function DangerZone({ api }: { api: RoomApi }) {
   const navigate = useNavigate();
+  const [error, setError] = useState('');
   return (
     <section className="card card-danger stack-sm">
       <h2 className="h2">Delete room</h2>
@@ -188,10 +189,13 @@ function DangerZone({ api }: { api: RoomApi }) {
         confirmLabel="Delete forever"
         prompt={<>Delete <strong>{api.room!.name}</strong> for everyone?</>}
         onConfirm={async () => {
+          setError('');
           const res = await api.deleteRoom();
           if (res.ok) navigate('/', { replace: true });
+          else setError(`Couldn’t delete the room: ${res.message ?? 'something went wrong'}.`);
         }}
       />
+      {error && <p className="error small" role="alert">{error}</p>}
     </section>
   );
 }
