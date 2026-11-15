@@ -96,6 +96,28 @@ describe('migration 005: audit log', () => {
     expect((await db.query('select * from public.rankings')).rows).toHaveLength(2);
   });
 
+  it('migration 006 targets the right default constraint name', async () => {
+    const r = await db.query<{ conname: string; confdeltype: string }>(
+      `select conname, confdeltype from pg_constraint where conrelid = 'public.rooms'::regclass and contype = 'f'`);
+    expect(r.rows).toEqual([{ conname: 'rooms_owner_id_fkey', confdeltype: 'r' }]);
+  });
+
+  it('migration 006: deleting an auth user who owns a room fails and keeps all data', async () => {
+    const counts = async () => (await db.query(`select (select count(*) from public.rooms) r, (select count(*) from public.members) m,
+      (select count(*) from public.fragrances) f, (select count(*) from public.rankings) k, (select count(*) from public.invites) i`)).rows[0];
+    const before = await counts();
+    await expect(db.query('delete from auth.users where id = $1', [OWNER.id])).rejects.toThrow(/foreign key/);
+    expect(await counts()).toEqual(before);
+  });
+
+  it('migration 006: deleting a non-owner still cascades their member rows and rankings (unchanged)', async () => {
+    await db.query('delete from auth.users where id = $1', [FRIEND.id]);
+    expect((await db.query('select * from public.members where id = $1', [friendMemberId])).rows).toHaveLength(0);
+    expect((await db.query('select * from public.rankings where member_id = $1', [friendMemberId])).rows).toHaveLength(0);
+    expect((await db.query('select * from public.rooms')).rows).toHaveLength(1);
+    expect((await logged('members')).map((r) => r.old_row.id)).toEqual([friendMemberId]);
+  });
+
   it('authenticated users cannot read or write audit_log', async () => {
     await as(OWNER, (q) => q('delete from public.rankings where room_id = $1 and member_id <> $2', [roomId, friendMemberId]));
     for (const stmt of [
