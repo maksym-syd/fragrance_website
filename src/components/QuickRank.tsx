@@ -60,7 +60,7 @@ export default function QuickRank({ api, onClose }: { api: RoomApi; onClose: () 
   function undo() {
     const last = steps[steps.length - 1];
     if (!last) return;
-    if (last.ranked) api.setTier(last.id, null);
+    if (last.ranked) api.setTier(last.id, null, { undo: false });
     setSteps((s) => s.slice(0, -1));
   }
 
