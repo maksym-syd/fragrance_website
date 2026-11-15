@@ -622,6 +622,12 @@ kbd {
 .qr { grid-template-rows: auto minmax(0, 1fr) auto; min-height: min(560px, 92dvh); }
 .qr-card { display: grid; gap: 8px; align-content: start; padding-block: 8px; animation: rise 0.18s ease-out; }
 .qr-card .sheet-title { font-size: 1.9rem; }
+/* Every card the same height, so the tier buttons below never move between bottles. Title up to
+   2 lines, accords up to 2 rows of tags (26px each), notes on one line. */
+.qr-card:not(.qr-done) { min-height: 240px; }
+.qr-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.qr-accords { max-height: calc(2 * 26px + 6px); overflow: hidden; }
+.qr-notes { color: var(--ink-2); }
 .qr-done { align-self: center; justify-items: start; }
 .qr-actions { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; width: 100%; }
 

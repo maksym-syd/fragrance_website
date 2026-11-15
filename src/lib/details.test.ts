@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { accordOverlap, indexRankings, noteOverlap } from './overlap';
 import { buildCatalog, type CatalogEntry } from './catalog';
 import {
-  applyEntry, draftFromFragrance, draftToFragrance, EMPTY_DRAFT, nameOptions, otherNotes, popularEntries, quickAddDetail, roomVocab, validYear, withPending,
+  applyEntry, draftFromFragrance, draftToFragrance, EMPTY_DRAFT, nameOptions, otherNotes, popularEntries, pyramidLine, quickAddDetail, roomVocab, validYear, withPending,
 } from './details';
 import { splitNotes } from './reference';
 import type { Fragrance } from './types';
@@ -137,5 +137,20 @@ describe('accordOverlap', () => {
   it('noteOverlap still reads only the flat notes', () => {
     const rows = noteOverlap([{ id: 'f1', notes: ['rose'], accords: ['woody'] } as never], idx);
     expect(rows.map((r) => r.note)).toEqual(['rose']);
+  });
+});
+
+describe('pyramidLine', () => {
+  it('lists only the tiers that have notes', () => {
+    expect(pyramidLine(frag({ notes_top: ['bergamot', 'apple'], notes_base: ['musk'], notes: ['bergamot', 'apple', 'musk'] })))
+      .toBe('Top bergamot, apple · Base musk');
+  });
+
+  it('falls back to flat notes for rows without a pyramid', () => {
+    expect(pyramidLine(frag({ notes: ['vanilla', 'tonka'] }))).toBe('Notes vanilla, tonka');
+  });
+
+  it('is null when there are no notes at all', () => {
+    expect(pyramidLine(frag({}))).toBeNull();
   });
 });

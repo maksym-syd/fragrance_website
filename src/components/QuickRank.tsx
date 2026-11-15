@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { RoomApi } from '../hooks/useRoom';
+import { pyramidLine } from '../lib/details';
 import { TIERS } from '../lib/overlap';
 import { TIER_LABEL } from '../lib/tiers';
 import type { Tier } from '../lib/types';
@@ -38,6 +39,7 @@ export default function QuickRank({ api, onClose }: { api: RoomApi; onClose: () 
   const rankedCount = steps.filter((s) => s.ranked).length;
   const skippedCount = steps.length - rankedCount;
 
+  const notesLine = current ? pyramidLine(current) : null;
   const friends = current
     ? api.members
         .filter((m) => m.id !== me.id)
@@ -70,7 +72,8 @@ export default function QuickRank({ api, onClose }: { api: RoomApi; onClose: () 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') return keys.current.onClose();
       if (e.key === 'Tab') return trapTab(e, dialogRef.current);
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Holding a key would otherwise rank a run of bottles in one go.
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       const tier = TIERS.find((t) => t.toLowerCase() === e.key.toLowerCase());
       if (tier) keys.current.rank(tier);
       else if (e.key === 'ArrowRight') keys.current.skip();
@@ -112,16 +115,16 @@ export default function QuickRank({ api, onClose }: { api: RoomApi; onClose: () 
         {current ? (
           <>
             <div key={current.id} className="qr-card">
-              <p className="sheet-title">{current.name}</p>
+              <p className="sheet-title qr-name">{current.name}</p>
               <p className="muted">
-                {current.house}
-                {current.concentration && <>, {current.concentration}</>}
+                {[current.house, current.concentration, current.release_year].filter(Boolean).join(' · ')}
               </p>
-              {current.notes.length > 0 && (
-                <div className="tags">
-                  {current.notes.map((n) => <span key={n} className="tag">{n}</span>)}
-                </div>
+              {current.accords.length > 0 && (
+                <ul className="tags qr-accords" aria-label="Accords">
+                  {current.accords.map((a) => <li key={a} className="tag">{a}</li>)}
+                </ul>
               )}
+              {notesLine && <p className="small qr-notes ellipsis" title={notesLine}>{notesLine}</p>}
               {friends.length > 0 && (
                 <div className="row-wrap">
                   {friends.map(({ m, tier }) => (
