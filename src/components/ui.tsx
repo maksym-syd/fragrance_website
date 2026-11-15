@@ -15,9 +15,12 @@ export function useModal(
 ) {
   const latest = useRef({ onClose, returnFocus });
   latest.current = { onClose, returnFocus };
+  const openerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Kept across StrictMode's second mount, when focus is already on the dialog.
+    if (!openerRef.current && document.activeElement instanceof HTMLElement) openerRef.current = document.activeElement;
+    const opener = openerRef.current;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') return latest.current.onClose();
       const dialog = ref.current;
