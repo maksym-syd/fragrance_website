@@ -16,6 +16,15 @@ export function normalizeCode(input: string): string {
   return input.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 6);
 }
 
+/**
+ * A room code from whatever was typed or pasted: a full room link ("https://…/r/k7p2qx/overlap?x")
+ * yields its code; anything else is treated as a code and cleaned with normalizeCode.
+ */
+export function extractRoomCode(input: string): string {
+  const m = /\/r\/([A-Za-z0-9]{6})(?![A-Za-z0-9])/.exec(input);
+  return m ? m[1].toUpperCase() : normalizeCode(input);
+}
+
 export function normalizeEmail(input: string): string {
   return input.trim().toLowerCase();
 }
