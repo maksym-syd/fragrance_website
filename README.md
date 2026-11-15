@@ -114,6 +114,60 @@ Migrations 003 and 004 are independent of each other and can go in either order,
 
    > **Do not run `exports/backfill-rollback-2026-11-06-14-40-54.sql`.** It was generated before this guard existed, so it reverts rows unconditionally and would overwrite every member edit made since 2026-11-06. If you need to undo part of that backfill, restore individual rows from the audit log (see "Applying 005 and 006") or from a backup.
 
+## Applying 005 and 006
+
+`005_audit_log.sql` keeps a copy of every deleted row, and of every fragrance before it is edited, in `public.audit_log`. `006_owner_restrict.sql` stops a deleted auth account from taking its rooms with it. Both are applied by hand and are independent of each other and of the frontend. The project is on Supabase Free, which has **no platform backups**, so take your own first.
+
+1. **Back up.** `npm run backup`, and check that `exports/backup-<time>/manifest.json` lists all five tables.
+2. **Apply 005.** Paste `supabase/migrations/005_audit_log.sql` into the SQL Editor and click **Run**. Then check:
+   ```sql
+   select tgname from pg_trigger where tgname like 'audit_%' order by 1;
+   -- audit_fragrances, audit_invites, audit_members, audit_rankings, audit_rooms
+   select count(*) from public.audit_log;  -- 0
+   ```
+3. **Apply 006.** First confirm the constraint name:
+   ```sql
+   select conname from pg_constraint where conrelid = 'public.rooms'::regclass and contype = 'f';
+   -- expect exactly: rooms_owner_id_fkey (otherwise edit the name in 006 before running it)
+   ```
+   Paste `supabase/migrations/006_owner_restrict.sql` and click **Run**. Then check that `confdeltype` is `r` (restrict):
+   ```sql
+   select conname, confdeltype from pg_constraint where conrelid = 'public.rooms'::regclass and contype = 'f';
+   ```
+   From now on, deleting a user under **Authentication → Users** fails while they own a room. Delete the room first (it is logged by 005), or hand it over with `update public.rooms set owner_id = '<new owner user id>' where id = '<room id>';`. Deleting a user who owns no rooms works as before: their memberships and rankings are removed (and logged).
+
+Each file ends with its rollback SQL in a comment. Export `audit_log` before rolling back 005.
+
+### Restoring rows from the audit log
+Only the SQL Editor (or the service role) can read `audit_log`. The app can't. Find what was lost:
+```sql
+select id, at, actor, table_name, op, old_row
+from public.audit_log
+where at > now() - interval '1 day'
+order by id desc;
+```
+Put deleted rows back, parents before children. For example, a whole deleted room (replace the room id):
+```sql
+begin;
+insert into public.rooms      select (jsonb_populate_record(null::public.rooms,      old_row)).* from public.audit_log where op = 'DELETE' and table_name = 'rooms'      and old_row->>'id'      = '<room id>';
+insert into public.members    select (jsonb_populate_record(null::public.members,    old_row)).* from public.audit_log where op = 'DELETE' and table_name = 'members'    and old_row->>'room_id' = '<room id>';
+insert into public.invites    select (jsonb_populate_record(null::public.invites,    old_row)).* from public.audit_log where op = 'DELETE' and table_name = 'invites'    and old_row->>'room_id' = '<room id>';
+insert into public.fragrances select (jsonb_populate_record(null::public.fragrances, old_row)).* from public.audit_log where op = 'DELETE' and table_name = 'fragrances' and old_row->>'room_id' = '<room id>';
+insert into public.rankings   select (jsonb_populate_record(null::public.rankings,   old_row)).* from public.audit_log where op = 'DELETE' and table_name = 'rankings'   and old_row->>'room_id' = '<room id>';
+commit;
+```
+For a single removed member, run only the `members` and `rankings` lines, filtered on `old_row->>'id'` / `old_row->>'member_id'`. The member's auth user must still exist. Re-add their invite too if the room is invite-only. Fragrances they added had `added_by` cleared when they were removed; that shows up as an `UPDATE` row for `fragrances`.
+
+Undo a fragrance edit from its `UPDATE` row (replace the audit id):
+```sql
+update public.fragrances f
+set (name, house, concentration, notes, perfumers, accords, notes_top, notes_heart, notes_base, release_year) =
+    (o.name, o.house, o.concentration, o.notes, o.perfumers, o.accords, o.notes_top, o.notes_heart, o.notes_base, o.release_year)
+from public.audit_log a, jsonb_populate_record(null::public.fragrances, a.old_row) o
+where a.id = <audit id> and f.id = o.id;
+```
+That update is itself logged, so it can be undone the same way. The log grows forever; prune it by hand if needed (`delete from public.audit_log where at < now() - interval '1 year';`).
+
 ## Reference catalog
 
 Autocomplete comes from a static file, `public/catalog/catalog-<hash>.json` (about 42,000 fragrances, 3.2 MB raw, 0.9 MB gzipped). It's fetched only on the Add and edit screens and is never in the JS bundle. If it fails to load, every field still works as plain text.
@@ -136,7 +190,9 @@ To rebuild it, download the CSV (kept out of git) and run `npm run build-catalog
 supabase/migrations/001_init.sql  schema, constraints, RLS, create_room(), realtime
 supabase/migrations/003_*.sql     perfumers, accords, note pyramid, release year
 supabase/migrations/004_*.sql     only the owner can remove a fragrance
-scripts/seed.ts                   demo room (flag + service key)
+supabase/migrations/005_*.sql     audit_log: copy of every deleted row and every fragrance before an edit
+supabase/migrations/006_*.sql     an owner's auth account can't be deleted while they own a room
+scripts/seed.ts                   demo room (flags + --project + service key)
 scripts/verify-rls.ts             live RLS check
 scripts/backup.ts                 read-only full JSON backup
 scripts/build-catalog.ts          Parfumo CSV -> public/catalog/

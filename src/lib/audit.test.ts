@@ -96,6 +96,17 @@ describe('migration 005: audit log', () => {
     expect((await db.query('select * from public.rankings')).rows).toHaveLength(2);
   });
 
+  it('the README query undoes a fragrance edit from its UPDATE row', async () => {
+    await as(FRIEND, (q) => q(`update public.fragrances set name = 'Vandalised', notes = '{x}' where id = $1`, [fragranceId]));
+    const auditId = (await db.query<{ id: number }>(`select id from public.audit_log where op = 'UPDATE'`)).rows[0].id;
+    await db.query(`update public.fragrances f
+      set (name, house, concentration, notes, perfumers, accords, notes_top, notes_heart, notes_base, release_year) =
+          (o.name, o.house, o.concentration, o.notes, o.perfumers, o.accords, o.notes_top, o.notes_heart, o.notes_base, o.release_year)
+      from public.audit_log a, jsonb_populate_record(null::public.fragrances, a.old_row) o
+      where a.id = $1 and f.id = o.id`, [auditId]);
+    expect((await db.query('select name, notes from public.fragrances where id = $1', [fragranceId])).rows[0]).toEqual({ name: 'Aventus', notes: [] });
+  });
+
   it('migration 006 targets the right default constraint name', async () => {
     const r = await db.query<{ conname: string; confdeltype: string }>(
       `select conname, confdeltype from pg_constraint where conrelid = 'public.rooms'::regclass and contype = 'f'`);
