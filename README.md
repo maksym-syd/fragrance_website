@@ -74,7 +74,7 @@ Email magic links work out of the box (the **Email** provider is enabled by defa
 
 ### 6. Verify the security rules against your real project (recommended)
 ```bash
-npm run verify-rls
+npm run verify-rls -- --project=<ref>
 ```
 This creates two throwaway users. One builds a room; the other, signed in with the public anon key exactly as a browser would be, tries to read and write it. The script checks that an outsider can't see the room, fragrances, rankings, members or invites, and can't join or invite themselves. It also checks that access works after an invite and disappears after an uninvite, and that a member can't remove a fragrance. Then it deletes everything it created. It needs `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`.
 
@@ -82,9 +82,12 @@ This creates two throwaway users. One builds a room; the other, signed in with t
 
 ### 7. Optional: demo data
 ```bash
-npm run seed -- --yes --invite you@example.com
+npm run seed -- --yes --invite you@example.com --project=<ref>
 ```
 This creates a "Demo Sniff Club" with 4 fake members (Ana, Ken, Mia, Leo), 13 fragrances and ~38 rankings, and invites your email. Open the printed `/r/CODE`, join, and look at **Overlap**. The fake members are confirmed auth users at `@example.com` addresses with no password, so they can't sign in. You can delete them under **Authentication → Users**. It requires the `--yes` flag and the service role key.
+
+### Writing scripts need `--project=<ref>`
+`seed`, `verify-rls` and a real `backfill --no-dry-run` use the service role key, which bypasses RLS. They refuse to start unless you name the project: `--project=<ref>` must equal the subdomain of `VITE_SUPABASE_URL` (`https://<ref>.supabase.co`). Without the flag they print the expected ref and exit. A `localhost`/`127.0.0.1` URL needs no flag. `backup` and `export` only read, so they are not guarded.
 
 ## Upgrading a live site to fragrance details
 
@@ -105,7 +108,7 @@ Migrations 003 and 004 are independent of each other and can go in either order,
 6. **Apply.** Rehearse first; without `--no-dry-run` nothing is written:
    ```bash
    npm run backfill -- --apply --plan-file exports/backfill-plan.json
-   npm run backfill -- --apply --plan-file exports/backfill-plan.json --no-dry-run
+   npm run backfill -- --apply --plan-file exports/backfill-plan.json --no-dry-run --project=<ref>
    ```
    The real run needs `SUPABASE_SERVICE_ROLE_KEY`. It takes a fresh backup and stops if that fails. It skips any row that changed since the plan, updates only `fragrances`, by id, and never deletes. It then checks that the row counts of all five tables and a hash of the rankings are identical before and after. To undo it, paste `exports/backfill-rollback-<time>.sql` into the SQL Editor; that restores only the columns it changed. If members edited those rows after the run, the rollback overwrites their edits.
 

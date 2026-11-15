@@ -5,7 +5,7 @@
 //   Rehearse against the live database (needs the service key; reads only):
 //     npm run backfill -- --apply --plan-file exports/backfill-plan.json
 //   Write, after reviewing the rehearsal:
-//     npm run backfill -- --apply --plan-file exports/backfill-plan.json --no-dry-run
+//     npm run backfill -- --apply --plan-file exports/backfill-plan.json --no-dry-run --project=<ref>
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -38,9 +38,11 @@ function writePlan() {
   console.log(`-> ${outJson}\n-> ${outMd}\nNothing was applied.`);
 }
 
-async function supabaseStore(): Promise<Store> {
+async function supabaseStore(writes: boolean): Promise<Store> {
   const { serviceClient } = await import('./env');
-  const { admin } = serviceClient();
+  const { admin, url } = serviceClient();
+  // Writes need --project=<ref>; the dry-run rehearsal only reads.
+  if (writes) (await import('./lib/project-guard')).assertProject(url);
   const columns = 'name,house,concentration,notes,perfumers,accords,notes_top,notes_heart,notes_base,release_year';
   return {
     async snapshot() {
@@ -92,7 +94,7 @@ async function apply() {
   }
   const dryRun = !process.argv.includes('--no-dry-run');
   const plan = JSON.parse(readFileSync(planFile, 'utf8')) as Plan;
-  const store = await supabaseStore();
+  const store = await supabaseStore(!dryRun);
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
   const rollback = join('exports', `backfill-rollback-${stamp}.sql`);
   mkdirSync('exports', { recursive: true });

@@ -3,14 +3,16 @@
 // signed in with the public anon key, exactly like the browser — can't read or write it.
 // Cleans up after itself.
 //
-//   npm run verify-rls
+//   npm run verify-rls -- --project=<ref>
 //
 // Requires the Email provider enabled (it is by default) and SUPABASE_SERVICE_ROLE_KEY.
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { ensureUser, serviceClient } from './env';
+import { assertProject } from './lib/project-guard';
 
 const { admin, url, anonKey } = serviceClient();
+assertProject(url);
 if (!anonKey) {
   console.error('Missing VITE_SUPABASE_ANON_KEY');
   process.exit(1);

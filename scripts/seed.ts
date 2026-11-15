@@ -1,19 +1,20 @@
 // Creates a demo room with 4 fake members and ~30 rankings so the Overlap view has something to show.
 //
-//   npm run seed -- --yes --invite you@example.com
+//   npm run seed -- --yes --invite you@example.com --project=<ref>
 //
 // Needs SUPABASE_SERVICE_ROLE_KEY. Fake members are real (password-less) auth users with
 // @example.com emails; they can't sign in. --invite adds your email so you can open the room.
 import { POPULAR } from '../src/lib/popular';
 import type { Tier } from '../src/lib/overlap';
 import { ensureUser, randomCode, serviceClient } from './env';
+import { assertProject } from './lib/project-guard';
 
 const args = process.argv.slice(2);
 const inviteIdx = args.indexOf('--invite');
 const invite = inviteIdx >= 0 ? args[inviteIdx + 1]?.trim().toLowerCase() : undefined;
 
 if (!args.includes('--yes') || !invite) {
-  console.log('Usage: npm run seed -- --yes --invite you@example.com');
+  console.log('Usage: npm run seed -- --yes --invite you@example.com --project=<ref>');
   console.log('Creates a demo room in your Supabase project and invites your email to it.');
   process.exit(1);
 }
@@ -40,7 +41,8 @@ const RANKS: Record<string, Partial<Record<Person, Tier>>> = {
 };
 
 async function main() {
-  const { admin } = serviceClient();
+  const { admin, url } = serviceClient();
+  assertProject(url);
 
   const users = await Promise.all(
     PEOPLE.map((name) => ensureUser(admin, `${name.toLowerCase()}.demo@example.com`, name)),
