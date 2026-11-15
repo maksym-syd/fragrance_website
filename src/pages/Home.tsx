@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDocumentTitle } from '../components/ui';
 import { friendlyError } from '../hooks/useRoom';
-import { defaultDisplayName, normalizeCode } from '../lib/normalize';
+import { defaultDisplayName, extractRoomCode, normalizeCode } from '../lib/normalize';
 import { db } from '../lib/supabase';
 import type { Room } from '../lib/types';
 
@@ -129,8 +129,8 @@ export default function Home({ user }: { user: User }) {
 
         <form className="card stack-sm" onSubmit={joinRoom}>
           <h2 className="h2">Join with a code</h2>
-          <p className="muted small">Got a 6-character code from a friend? Enter it to join.</p>
-          <label className="label" htmlFor="room-code">Room code</label>
+          <label className="label" htmlFor="room-code">Room link or code</label>
+          <p className="muted small" id="room-code-hint">Paste the link or type the 6-character code.</p>
           <input
             id="room-code"
             className="code-input"
@@ -138,8 +138,14 @@ export default function Home({ user }: { user: User }) {
             autoCapitalize="characters"
             autoComplete="off"
             spellCheck={false}
+            aria-describedby="room-code-hint"
             value={code}
-            onChange={(e) => setCode(normalizeCode(e.target.value))}
+            onChange={(e) => setCode(extractRoomCode(e.target.value))}
+            onPaste={(e) => {
+              // A pasted link replaces what's there rather than being appended to it.
+              e.preventDefault();
+              setCode(extractRoomCode(e.clipboardData.getData('text')));
+            }}
           />
           <button className="btn" disabled={code.length !== 6}>Open room</button>
         </form>

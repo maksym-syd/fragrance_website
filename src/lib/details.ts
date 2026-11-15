@@ -32,6 +32,18 @@ export function otherNotes(f: Pick<Fragrance, 'notes' | 'notes_top' | 'notes_hea
   return f.notes.filter((n) => !placed.has(n));
 }
 
+/**
+ * The pyramid as one short line ("Top bergamot · Heart jasmine · Base musk"). Rows with no
+ * pyramid fall back to their flat notes. Null when there's nothing to show.
+ */
+export function pyramidLine(f: Pick<Fragrance, 'notes' | 'notes_top' | 'notes_heart' | 'notes_base'>): string | null {
+  const parts = ([['Top', f.notes_top], ['Heart', f.notes_heart], ['Base', f.notes_base]] as const)
+    .filter(([, list]) => list.length > 0)
+    .map(([label, list]) => `${label} ${list.join(', ')}`);
+  if (parts.length > 0) return parts.join(' · ');
+  return f.notes.length > 0 ? `Notes ${f.notes.join(', ')}` : null;
+}
+
 export function draftFromFragrance(f: Fragrance): Draft {
   return {
     name: f.name,
