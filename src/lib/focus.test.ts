@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { trapTarget } from './focus';
+import { firstConnected, trapTarget } from './focus';
 
 const items = ['first', 'middle', 'last'];
 
@@ -26,5 +26,22 @@ describe('trapTarget', () => {
 
   it('keeps focus on the dialog when nothing inside can take it', () => {
     expect(trapTarget([], 'body', false, 'dialog', false)).toBe('dialog');
+  });
+});
+
+describe('firstConnected', () => {
+  const onPage = new Set(['chip', 'main']);
+  const connected = (t: string) => onPage.has(t);
+
+  it('prefers the first candidate that is still on the page', () => {
+    expect(firstConnected(['chip', 'opener', 'main'], connected)).toBe('chip');
+  });
+
+  it('skips missing and removed candidates to reach the fallback', () => {
+    expect(firstConnected([null, 'opener', undefined, 'main'], connected)).toBe('main');
+  });
+
+  it('is null when nothing is left', () => {
+    expect(firstConnected([null, 'opener'], connected)).toBeNull();
   });
 });

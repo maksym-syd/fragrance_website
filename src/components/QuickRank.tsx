@@ -5,7 +5,7 @@ import { pyramidLine } from '../lib/details';
 import { TIERS } from '../lib/overlap';
 import { TIER_LABEL } from '../lib/tiers';
 import type { Tier } from '../lib/types';
-import { TierLetter, useModal } from './ui';
+import { boardFocusFallback, TierLetter, useModal } from './ui';
 
 type Step = { id: string; ranked: boolean };
 
@@ -64,7 +64,8 @@ export default function QuickRank({ api, onClose }: { api: RoomApi; onClose: () 
     setSteps((s) => s.slice(0, -1));
   }
 
-  useModal(dialogRef, onClose);
+  // Ranking the last unranked bottle removes the Quick rank button, so fall back to the board.
+  useModal(dialogRef, onClose, undefined, boardFocusFallback);
 
   const keys = useRef({ rank, skip, undo });
   keys.current = { rank, skip, undo };

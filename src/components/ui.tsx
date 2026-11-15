@@ -1,20 +1,22 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { FOCUSABLE, trapTarget } from '../lib/focus';
+import { firstConnected, FOCUSABLE, trapTarget } from '../lib/focus';
 import type { Tier } from '../lib/types';
 
 /**
  * Dialog behaviour shared by the tier sheet and quick rank: focus moves in on open, Tab stays
  * inside, Escape calls onClose, the page behind doesn't scroll. On close, focus goes to
- * returnFocus() if it finds something, else back to whatever had it when the dialog opened.
+ * returnFocus() if it finds something, else back to whatever had it when the dialog opened, else
+ * to fallback() when that element has left the page.
  * onClose and returnFocus are read when used, so they can change between renders.
  */
 export function useModal(
   ref: RefObject<HTMLElement>,
   onClose: () => void,
   returnFocus?: () => HTMLElement | null,
+  fallback?: () => HTMLElement | null,
 ) {
-  const latest = useRef({ onClose, returnFocus });
-  latest.current = { onClose, returnFocus };
+  const latest = useRef({ onClose, returnFocus, fallback });
+  latest.current = { onClose, returnFocus, fallback };
   const openerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -40,13 +42,16 @@ export function useModal(
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = overflow;
-      const preferred = latest.current.returnFocus;
+      const { returnFocus: preferred, fallback: lastResort } = latest.current;
       // Wait for the close to render: a chip that changed tier is a new element by then.
       requestAnimationFrame(() => {
         // Still on the page means it never really closed (StrictMode's mount, unmount, mount).
         if (ref.current?.isConnected) return;
-        const el = preferred?.() ?? (opener?.isConnected ? opener : null);
-        el?.focus({ preventScroll: true });
+        const el = firstConnected([preferred?.(), opener, lastResort?.()], (x) => x.isConnected);
+        if (!el) return;
+        // Headings and <main> can't take focus until they're given a tabindex.
+        if (el.tabIndex < 0 && !el.hasAttribute('tabindex')) el.tabIndex = -1;
+        el.focus({ preventScroll: true });
       });
     };
     // Runs once: re-running would pull focus out of a form whenever a realtime update arrives.
@@ -67,6 +72,16 @@ export function TierLetter({ tier, size = 'md', title }: { tier: Tier | null; si
 }
 
 /** Section title with an optional hint. The id comes from the title, so jump links can target it. */
+/** Somewhere on the board to land after a dialog whose opener is gone: a chip, the room title, or the page. */
+export function boardFocusFallback(): HTMLElement | null {
+  return (
+    document.querySelector<HTMLElement>('.tier-board [data-frag-id]') ??
+    document.querySelector<HTMLElement>('[data-frag-id]') ??
+    document.querySelector<HTMLElement>('.room-head h1') ??
+    document.querySelector<HTMLElement>('main')
+  );
+}
+
 export function SectionHead({ title, hint }: { title: string; hint?: string }) {
   return (
     <header className="section-head" id={title.toLowerCase().replace(/\s+/g, '-')}>
