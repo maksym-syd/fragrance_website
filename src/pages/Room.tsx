@@ -1,5 +1,5 @@
 import type { User } from '@supabase/supabase-js';
-import { useCallback, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import AddFragrance from '../components/AddFragrance';
 import MembersPanel from '../components/MembersPanel';
@@ -8,8 +8,9 @@ import Overlap from '../components/Overlap';
 import TierSheet from '../components/TierSheet';
 import { CopyButton, useDocumentTitle } from '../components/ui';
 import { signOut } from '../hooks/useAuth';
-import { useRoom, type RoomApi, type SaveStatus } from '../hooks/useRoom';
+import { useRoom, type Notice, type RoomApi, type SaveStatus } from '../hooks/useRoom';
 import { defaultDisplayName, normalizeCode } from '../lib/normalize';
+import { NOTICE_MS } from '../lib/roomState';
 
 export default function RoomPage({ user }: { user: User }) {
   const params = useParams();
@@ -19,6 +20,7 @@ export default function RoomPage({ user }: { user: User }) {
 
   if (api.status === 'loading') return <RoomSkeleton />;
   if (api.status === 'not-invited') return <JoinByCode api={api} user={user} code={code} />;
+  // Only a failed first load gets here; later failures keep the room and show StaleBanner.
   if (api.status === 'error') {
     return (
       <div className="narrow center-page stack-sm">
@@ -101,6 +103,8 @@ function RoomView({ api }: { api: RoomApi }) {
         </nav>
       </header>
 
+      {api.stale && <StaleBanner onRetry={api.reload} />}
+
       <Routes>
         <Route index element={<MyTiers api={api} onOpen={setOpenId} />} />
         <Route path="overlap" element={<Overlap api={api} onOpen={setOpenId} />} />
@@ -109,7 +113,12 @@ function RoomView({ api }: { api: RoomApi }) {
         <Route path="*" element={<Navigate to={base} replace />} />
       </Routes>
 
-      <SaveIndicator status={api.save} />
+      {/* One slot at the bottom: a toast wins over the Saving…/Saved pill, which it replaces. */}
+      {api.notice ? (
+        <Toast key={api.notice.id} notice={api.notice} onDismiss={api.dismissNotice} />
+      ) : (
+        <SaveIndicator status={api.save === 'error' ? 'idle' : api.save} />
+      )}
       {open && <TierSheet api={api} fragrance={open} onClose={closeSheet} />}
     </div>
   );
@@ -121,6 +130,72 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
     <span className={`save-status save-${status}`} role="status" aria-live="polite">
       {text}
     </span>
+  );
+}
+
+/** The room loaded once, but the latest refetch failed. Keep showing it, and say so. */
+function StaleBanner({ onRetry }: { onRetry: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="stale-banner" role="status">
+      <span>Connection lost. Showing the last saved data.</span>
+      <button
+        type="button"
+        className="btn-link"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          await onRetry();
+          setBusy(false);
+        }}
+      >
+        {busy ? 'Retrying…' : 'Retry'}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * "Unranked Aventus · Undo" or "Couldn't move Aventus to S · Retry". Clears itself after
+ * NOTICE_MS, but not while the pointer or focus is on it, so there's time to reach the button.
+ */
+function Toast({ notice, onDismiss }: { notice: Notice; onDismiss: (id?: number) => void }) {
+  const [held, setHeld] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (held) return;
+    const t = window.setTimeout(() => onDismiss(notice.id), NOTICE_MS);
+    return () => window.clearTimeout(t);
+  }, [notice.id, held, onDismiss]);
+
+  const isError = notice.tone === 'error';
+  return (
+    <div
+      ref={ref}
+      className={`toast ${isError ? 'toast-error' : ''}`}
+      role={isError ? 'alert' : 'status'}
+      onMouseEnter={() => setHeld(true)}
+      onMouseLeave={() => setHeld(false)}
+      onFocus={() => setHeld(true)}
+      onBlur={(e) => !ref.current?.contains(e.relatedTarget as Node | null) && setHeld(false)}
+    >
+      <span className="toast-text">{notice.text}</span>
+      {notice.action && (
+        <button
+          type="button"
+          className="toast-action"
+          onClick={() => {
+            onDismiss(notice.id);
+            notice.action!.run();
+          }}
+        >
+          {notice.action.label}
+        </button>
+      )}
+      <button type="button" className="toast-close" aria-label="Dismiss" onClick={() => onDismiss(notice.id)}>
+        ×
+      </button>
+    </div>
   );
 }
 

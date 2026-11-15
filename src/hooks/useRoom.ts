@@ -2,10 +2,20 @@ import type { PostgrestError, RealtimePostgresChangesPayload, User } from '@supa
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { dedupeKey } from '../lib/normalize';
 import { looseKey } from '../lib/reference';
+import {
+  afterLoad,
+  NOTICE_MS,
+  shortName,
+  tierFailLabel,
+  unrankedLabel,
+  type LoadOutcome,
+  type LoadState,
+  type Notice,
+} from '../lib/roomState';
 import { db } from '../lib/supabase';
 import type { Fragrance, FragrancePatch, Invite, Member, NewFragrance, Ranking, Room, Tier } from '../lib/types';
 
-export type RoomStatus = 'loading' | 'not-invited' | 'join' | 'ready' | 'error';
+export type { Notice, RoomStatus } from '../lib/roomState';
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 export interface RoomData {
@@ -14,6 +24,12 @@ export interface RoomData {
   fragrances: Fragrance[];
   rankings: Ranking[];
   invites: Invite[];
+}
+
+export interface WriteResult<T = unknown> {
+  ok: boolean;
+  data?: T | null;
+  message?: string;
 }
 
 const EMPTY: RoomData = { room: null, members: [], fragrances: [], rankings: [], invites: [] };
@@ -59,55 +75,72 @@ export function friendlyError(err: PostgrestError | Error | null | undefined): s
 }
 
 export function useRoom(code: string, user: User) {
-  const [status, setStatus] = useState<RoomStatus>('loading');
+  const [{ status, stale }, setLoadState] = useState<LoadState>({ status: 'loading', stale: false });
   const [data, setData] = useState<RoomData>(EMPTY);
   const [error, setError] = useState<string | null>(null);
   const [save, setSave] = useState<SaveStatus>('idle');
+  const [notice, setNotice] = useState<Notice | null>(null);
   const saveTimer = useRef<number>();
+  const noticeId = useRef(0);
   const myIdRef = useRef<string | null>(null);
+  // Labels and undo read the latest rows without making every callback depend on them.
+  const dataRef = useRef(data);
+  dataRef.current = data;
+
+  const finish = useCallback((outcome: LoadOutcome, message?: string) => {
+    if (outcome.ok) setError(null);
+    else setError(message ?? 'Something went wrong');
+    setLoadState((prev) => afterLoad(prev, outcome));
+  }, []);
 
   const load = useCallback(async () => {
-    const client = db();
-    const { data: room, error: roomErr } = await client.from('rooms').select('*').eq('code', code).maybeSingle();
-    if (roomErr) {
-      setError(friendlyError(roomErr));
-      setStatus('error');
-      return;
+    const fetchRoom = async () => {
+      const client = db();
+      const { data: room, error: roomErr } = await client.from('rooms').select('*').eq('code', code).maybeSingle();
+      if (roomErr) {
+        finish({ ok: false }, friendlyError(roomErr));
+        return;
+      }
+      if (!room) {
+        // RLS hides rooms you aren't invited to, so "doesn't exist" and "not invited" look the same.
+        setData(EMPTY);
+        finish({ ok: true, status: 'not-invited' });
+        return;
+      }
+      const isOwner = room.owner_id === user.id;
+      const [m, f, r, inv] = await Promise.all([
+        client.from('members').select('*').eq('room_id', room.id).order('joined_at'),
+        client.from('fragrances').select('*').eq('room_id', room.id).order('created_at'),
+        client.from('rankings').select('*').eq('room_id', room.id),
+        isOwner
+          ? client.from('invites').select('*').eq('room_id', room.id).order('created_at')
+          : Promise.resolve({ data: [] as Invite[], error: null }),
+      ]);
+      const firstErr = m.error || f.error || r.error || inv.error;
+      if (firstErr) {
+        finish({ ok: false }, friendlyError(firstErr));
+        return;
+      }
+      const members = (m.data ?? []) as Member[];
+      setData({
+        room,
+        members,
+        fragrances: ((f.data ?? []) as Fragrance[]).map(withDetails),
+        rankings: (r.data ?? []) as Ranking[],
+        invites: (inv.data ?? []) as Invite[],
+      });
+      finish({ ok: true, status: members.some((x) => x.user_id === user.id) ? 'ready' : 'join' });
+    };
+    try {
+      await fetchRoom();
+    } catch (e) {
+      // A dropped connection can throw instead of returning an error object.
+      finish({ ok: false }, friendlyError(e instanceof Error ? e : null));
     }
-    if (!room) {
-      // RLS hides rooms you aren't invited to, so "doesn't exist" and "not invited" look the same.
-      setData(EMPTY);
-      setStatus('not-invited');
-      return;
-    }
-    const isOwner = room.owner_id === user.id;
-    const [m, f, r, inv] = await Promise.all([
-      client.from('members').select('*').eq('room_id', room.id).order('joined_at'),
-      client.from('fragrances').select('*').eq('room_id', room.id).order('created_at'),
-      client.from('rankings').select('*').eq('room_id', room.id),
-      isOwner
-        ? client.from('invites').select('*').eq('room_id', room.id).order('created_at')
-        : Promise.resolve({ data: [] as Invite[], error: null }),
-    ]);
-    const firstErr = m.error || f.error || r.error || inv.error;
-    if (firstErr) {
-      setError(friendlyError(firstErr));
-      setStatus('error');
-      return;
-    }
-    const members = (m.data ?? []) as Member[];
-    setData({
-      room,
-      members,
-      fragrances: ((f.data ?? []) as Fragrance[]).map(withDetails),
-      rankings: (r.data ?? []) as Ranking[],
-      invites: (inv.data ?? []) as Invite[],
-    });
-    setStatus(members.some((x) => x.user_id === user.id) ? 'ready' : 'join');
-  }, [code, user.id]);
+  }, [code, user.id, finish]);
 
   useEffect(() => {
-    setStatus('loading');
+    setLoadState({ status: 'loading', stale: false });
     load();
   }, [load]);
 
@@ -186,14 +219,33 @@ export function useRoom(code: string, user: User) {
   myIdRef.current = me?.id ?? null;
   const isOwner = !!data.room && data.room.owner_id === user.id;
 
-  /** Wrap a write: show Saving…/Saved, and on failure resync from the server. */
+  /** A toast. The newest replaces any older one; Room clears it after a while. */
+  const showNotice = useCallback((n: Omit<Notice, 'id'>) => setNotice({ ...n, id: ++noticeId.current }), []);
+  const dismissNotice = useCallback((id?: number) => setNotice((n) => (id === undefined || n?.id === id ? null : n)), []);
+
+  /**
+   * Wrap a write: show Saving…/Saved. On failure, say what failed (`label`), offer `retry` when
+   * repeating the write is safe, and resync from the server.
+   */
   const track = useCallback(
-    async <T,>(fn: () => PromiseLike<{ data?: T | null; error: PostgrestError | null }>): Promise<{ ok: boolean; data?: T | null; message?: string }> => {
+    async <T,>(
+      label: string,
+      fn: () => PromiseLike<{ data?: T | null; error: PostgrestError | null }>,
+      retry?: () => void,
+    ): Promise<WriteResult<T>> => {
       window.clearTimeout(saveTimer.current);
       setSave('saving');
-      const { data: result, error: err } = await fn();
+      let res: { data?: T | null; error: PostgrestError | null };
+      try {
+        res = await fn();
+      } catch (e) {
+        res = { data: null, error: { message: e instanceof Error ? e.message : 'Network error' } as PostgrestError };
+      }
+      const { data: result, error: err } = res;
       if (err) {
         setSave('error');
+        saveTimer.current = window.setTimeout(() => setSave('idle'), NOTICE_MS);
+        showNotice({ tone: 'error', text: label, action: retry && { label: 'Retry', run: retry } });
         load();
         return { ok: false, message: friendlyError(err) };
       }
@@ -201,13 +253,22 @@ export function useRoom(code: string, user: User) {
       saveTimer.current = window.setTimeout(() => setSave('idle'), 2000);
       return { ok: true, data: result };
     },
-    [load],
+    [load, showNotice],
   );
 
+  type SetTier = (fragranceId: string, tier: Tier | null, opts?: { undo?: boolean }) => Promise<WriteResult | undefined>;
+  const setTierRef = useRef<SetTier>();
+
+  /**
+   * Rank, re-rank or unrank one of my fragrances. Unranking deletes the row, so it offers Undo
+   * unless the caller has its own (`{ undo: false }`, e.g. Quick rank stepping back).
+   */
   const setTier = useCallback(
-    async (fragranceId: string, tier: Tier | null) => {
+    async (fragranceId: string, tier: Tier | null, opts: { undo?: boolean } = {}): Promise<WriteResult | undefined> => {
       if (!me || !roomId) return;
       const key = rankKey({ member_id: me.id, fragrance_id: fragranceId });
+      const name = dataRef.current.fragrances.find((f) => f.id === fragranceId)?.name;
+      const previous = dataRef.current.rankings.find((x) => rankKey(x) === key)?.tier ?? null;
       const row: Ranking = {
         room_id: roomId,
         member_id: me.id,
@@ -219,21 +280,32 @@ export function useRoom(code: string, user: User) {
         ...d,
         rankings: tier ? upsertBy(d.rankings, row, rankKey) : d.rankings.filter((x) => rankKey(x) !== key),
       }));
-      return track(() =>
-        tier
-          ? db().from('rankings').upsert(row, { onConflict: 'member_id,fragrance_id' })
-          : db().from('rankings').delete().eq('member_id', me.id).eq('fragrance_id', fragranceId),
+      if (!tier && previous && opts.undo !== false) {
+        showNotice({
+          tone: 'info',
+          text: unrankedLabel(name),
+          action: { label: 'Undo', run: () => setTierRef.current?.(fragranceId, previous, { undo: false }) },
+        });
+      }
+      return track(
+        tierFailLabel(name, tier),
+        () =>
+          tier
+            ? db().from('rankings').upsert(row, { onConflict: 'member_id,fragrance_id' })
+            : db().from('rankings').delete().eq('member_id', me.id).eq('fragrance_id', fragranceId),
+        () => setTierRef.current?.(fragranceId, tier, { undo: false }),
       );
     },
-    [me, roomId, track],
+    [me, roomId, track, showNotice],
   );
+  setTierRef.current = setTier;
 
   const addFragrance = useCallback(
     async (f: NewFragrance) => {
       if (!me || !roomId) return { ok: false, message: 'Not in a room' };
       const dupe = findDuplicate(data.fragrances, f.name, f.house);
       if (dupe) return { ok: false, message: `${dupe.name} by ${dupe.house} is already in this room` };
-      const res = await track<Fragrance>(() =>
+      const res = await track<Fragrance>(`Couldn’t add ${shortName(f.name)}`, () =>
         db()
           .from('fragrances')
           .insert({ ...f, name: f.name.trim(), house: f.house.trim(), room_id: roomId, added_by: me.id })
@@ -254,7 +326,8 @@ export function useRoom(code: string, user: User) {
     async (id: string, patch: FragrancePatch) => {
       const dupe = findDuplicate(data.fragrances, patch.name, patch.house, id);
       if (dupe) return { ok: false, message: `${dupe.name} by ${dupe.house} is already in this room` };
-      const res = await track<Fragrance>(() =>
+      const name = dataRef.current.fragrances.find((x) => x.id === id)?.name ?? patch.name;
+      const res = await track<Fragrance>(`Couldn’t save changes to ${shortName(name)}`, () =>
         db()
           .from('fragrances')
           .update({ ...patch, name: patch.name.trim(), house: patch.house.trim() })
@@ -275,12 +348,13 @@ export function useRoom(code: string, user: User) {
   const removeFragrance = useCallback(
     async (id: string) => {
       if (!isOwner) return { ok: false, message: 'Only the room owner can remove a fragrance' };
+      const name = dataRef.current.fragrances.find((x) => x.id === id)?.name;
       setData((d) => ({
         ...d,
         fragrances: d.fragrances.filter((x) => x.id !== id),
         rankings: d.rankings.filter((x) => x.fragrance_id !== id),
       }));
-      return track<Fragrance[]>(async () => {
+      return track<Fragrance[]>(`Couldn’t remove ${shortName(name)}`, async () => {
         const res = await db().from('fragrances').delete().eq('id', id).select();
         if (res.error || res.data.length > 0) return res;
         // Reported as a failure so track() shows it and reloads, bringing the bottle back.
@@ -323,19 +397,26 @@ export function useRoom(code: string, user: User) {
     [code, load],
   );
 
+  const setJoinByCodeRef = useRef<(open: boolean) => unknown>();
   const setJoinByCode = useCallback(
     async (open: boolean) => {
       if (!roomId) return { ok: false };
       setData((d) => (d.room ? { ...d, room: { ...d.room, join_by_code: open } } : d));
-      return track(() => db().from('rooms').update({ join_by_code: open }).eq('id', roomId));
+      return track(
+        open ? 'Couldn’t turn on joining by code' : 'Couldn’t turn off joining by code',
+        () => db().from('rooms').update({ join_by_code: open }).eq('id', roomId),
+        () => void setJoinByCodeRef.current?.(open),
+      );
     },
     [roomId, track],
   );
 
+  setJoinByCodeRef.current = setJoinByCode;
+
   const rename = useCallback(
     async (displayName: string) => {
       if (!me) return { ok: false };
-      const res = await track(() => db().from('members').update({ display_name: displayName.trim() }).eq('id', me.id));
+      const res = await track('Couldn’t change your name', () => db().from('members').update({ display_name: displayName.trim() }).eq('id', me.id));
       if (res.ok) {
         setData((d) => ({
           ...d,
@@ -352,7 +433,7 @@ export function useRoom(code: string, user: User) {
   const addInvite = useCallback(
     async (email: string) => {
       if (!roomId) return { ok: false };
-      const res = await track<Invite>(() => db().from('invites').insert({ room_id: roomId, email }).select().single());
+      const res = await track<Invite>(`Couldn’t invite ${email}`, () => db().from('invites').insert({ room_id: roomId, email }).select().single());
       if (res.ok && res.data) {
         const created = res.data;
         setData((d) => ({ ...d, invites: [...d.invites, created] }));
@@ -367,7 +448,7 @@ export function useRoom(code: string, user: User) {
   const removeInvite = useCallback(
     async (email: string) => {
       if (!roomId) return { ok: false };
-      const res = await track(() => db().from('invites').delete().eq('room_id', roomId).eq('email', email));
+      const res = await track(`Couldn’t remove ${email}`, () => db().from('invites').delete().eq('room_id', roomId).eq('email', email));
       // Server-side trigger also removes their membership and rankings; reflect that.
       if (res.ok) await load();
       return res;
@@ -377,13 +458,17 @@ export function useRoom(code: string, user: User) {
 
   const deleteRoom = useCallback(async () => {
     if (!roomId) return { ok: false };
-    return track(() => db().from('rooms').delete().eq('id', roomId));
+    return track('Couldn’t delete the room', () => db().from('rooms').delete().eq('id', roomId));
   }, [roomId, track]);
 
   return {
     status,
+    /** A refetch failed after the room loaded; what's on screen is the last good copy. */
+    stale,
     error,
     save,
+    notice,
+    dismissNotice,
     ...data,
     me,
     isOwner,
