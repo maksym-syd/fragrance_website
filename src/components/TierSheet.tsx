@@ -5,7 +5,7 @@ import { TIERS } from '../lib/overlap';
 import { TIER_LABEL } from '../lib/tiers';
 import type { Fragrance, FragrancePatch, Tier } from '../lib/types';
 import FragranceForm from './FragranceForm';
-import { TierLetter } from './ui';
+import { TierLetter, useModal } from './ui';
 
 function TagRow({ label, tags }: { label: string; tags: string[] }) {
   if (tags.length === 0) return null;
@@ -46,28 +46,27 @@ export default function TierSheet({ api, fragrance, onClose }: { api: RoomApi; f
   const [editing, setEditing] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
-  const escape = useRef(onClose);
-  escape.current = editing ? () => setEditing(false) : onClose;
+  // Escape backs out of the edit form first. Closing returns focus to the bottle's chip (found by
+  // id: it's a new element if it changed tier), else to whatever opened the sheet.
+  useModal(sheetRef, editing ? () => setEditing(false) : onClose, () =>
+    document.querySelector<HTMLElement>(`[data-frag-id="${CSS.escape(fragrance.id)}"]`),
+  );
+
+  // Entering or leaving the edit form unmounts the focused button: start on the name field, and
+  // come back to the details link on cancel.
+  const wasEditing = useRef(editing);
+  useEffect(() => {
+    if (wasEditing.current === editing) return;
+    wasEditing.current = editing;
+    const target = editing ? '#edit-name' : '.details .btn-link';
+    sheetRef.current?.querySelector<HTMLElement>(target)?.focus();
+  }, [editing]);
 
   const mine = api.rankings.find((r) => r.member_id === me.id && r.fragrance_id === fragrance.id)?.tier ?? null;
   const others = api.members
     .filter((m) => m.id !== me.id)
     .map((m) => ({ m, tier: api.rankings.find((r) => r.member_id === m.id && r.fragrance_id === fragrance.id)?.tier ?? null }))
     .filter((x) => x.tier);
-
-  // Runs once. onClose is a new function on each parent render, and re-running this would pull
-  // focus out of the edit form whenever a realtime update arrived.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && escape.current();
-    document.addEventListener('keydown', onKey);
-    sheetRef.current?.focus();
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
-    };
-  }, []);
 
   async function saveEdit(patch: FragrancePatch) {
     setEditError(null);

@@ -1,5 +1,55 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { FOCUSABLE, trapTarget } from '../lib/focus';
 import type { Tier } from '../lib/types';
+
+/**
+ * Dialog behaviour shared by the tier sheet and quick rank: focus moves in on open, Tab stays
+ * inside, Escape calls onClose, the page behind doesn't scroll. On close, focus goes to
+ * returnFocus() if it finds something, else back to whatever had it when the dialog opened.
+ * onClose and returnFocus are read when used, so they can change between renders.
+ */
+export function useModal(
+  ref: RefObject<HTMLElement>,
+  onClose: () => void,
+  returnFocus?: () => HTMLElement | null,
+) {
+  const latest = useRef({ onClose, returnFocus });
+  latest.current = { onClose, returnFocus };
+
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return latest.current.onClose();
+      const dialog = ref.current;
+      if (e.key !== 'Tab' || !dialog) return;
+      const items = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.getClientRects().length > 0);
+      const active = document.activeElement as HTMLElement | null;
+      const target = trapTarget(items, active, e.shiftKey, dialog, !!active && dialog.contains(active));
+      if (target) {
+        e.preventDefault();
+        target.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    ref.current?.focus();
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = overflow;
+      const preferred = latest.current.returnFocus;
+      // Wait for the close to render: a chip that changed tier is a new element by then.
+      requestAnimationFrame(() => {
+        // Still on the page means it never really closed (StrictMode's mount, unmount, mount).
+        if (ref.current?.isConnected) return;
+        const el = preferred?.() ?? (opener?.isConnected ? opener : null);
+        el?.focus({ preventScroll: true });
+      });
+    };
+    // Runs once: re-running would pull focus out of a form whenever a realtime update arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+}
 
 /** Sets the browser tab title; the app name always comes last. */
 export function useDocumentTitle(title?: string) {

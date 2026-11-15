@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { RoomApi } from '../hooks/useRoom';
 import { pyramidLine } from '../lib/details';
 import { TIERS } from '../lib/overlap';
 import { TIER_LABEL } from '../lib/tiers';
 import type { Tier } from '../lib/types';
-import { TierLetter } from './ui';
+import { TierLetter, useModal } from './ui';
 
 type Step = { id: string; ranked: boolean };
 
@@ -64,14 +64,13 @@ export default function QuickRank({ api, onClose }: { api: RoomApi; onClose: () 
     setSteps((s) => s.slice(0, -1));
   }
 
-  const keys = useRef({ rank, skip, undo, onClose });
-  keys.current = { rank, skip, undo, onClose };
+  useModal(dialogRef, onClose);
+
+  const keys = useRef({ rank, skip, undo });
+  keys.current = { rank, skip, undo };
 
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') return keys.current.onClose();
-      if (e.key === 'Tab') return trapTab(e, dialogRef.current);
       // Holding a key would otherwise rank a run of bottles in one go.
       if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       const tier = TIERS.find((t) => t.toLowerCase() === e.key.toLowerCase());
@@ -80,15 +79,17 @@ export default function QuickRank({ api, onClose }: { api: RoomApi; onClose: () 
       else if (e.key === 'ArrowLeft') keys.current.undo();
     };
     document.addEventListener('keydown', onKey);
-    dialogRef.current?.focus();
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = overflow;
-      previous?.focus({ preventScroll: true });
-    };
+    return () => document.removeEventListener('keydown', onKey);
   }, []);
+
+  // Switching between the card and the done screen unmounts the focused button. Put focus on the
+  // done screen's main action, or back on the dialog when Undo returns to a card.
+  const isDone = !current;
+  const focusOnMount = useCallback((el: HTMLElement | null) => el?.focus(), []);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!isDone && dialog && !dialog.contains(document.activeElement)) dialog.focus();
+  }, [isDone]);
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
@@ -167,9 +168,11 @@ export default function QuickRank({ api, onClose }: { api: RoomApi; onClose: () 
             <div className="qr-actions">
               <button className="btn btn-ghost" onClick={undo} disabled={steps.length === 0}>Undo</button>
               {rankedCount > 0 ? (
-                <Link className="btn btn-primary" to={`/r/${api.room!.code}/overlap`} onClick={onClose}>See overlap</Link>
+                <Link ref={focusOnMount} className="btn btn-primary" to={`/r/${api.room!.code}/overlap`} onClick={onClose}>
+                  See overlap
+                </Link>
               ) : (
-                <button className="btn btn-primary" onClick={onClose}>Done</button>
+                <button ref={focusOnMount} className="btn btn-primary" onClick={onClose}>Done</button>
               )}
             </div>
           </div>
@@ -177,19 +180,4 @@ export default function QuickRank({ api, onClose }: { api: RoomApi; onClose: () 
       </div>
     </div>
   );
-}
-
-function trapTab(e: KeyboardEvent, dialog: HTMLElement | null) {
-  const items = dialog?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]');
-  if (!items?.length) return;
-  const first = items[0];
-  const last = items[items.length - 1];
-  const active = document.activeElement;
-  if (e.shiftKey && (active === first || active === dialog)) {
-    e.preventDefault();
-    last.focus();
-  } else if (!e.shiftKey && active === last) {
-    e.preventDefault();
-    first.focus();
-  }
 }

@@ -70,14 +70,8 @@ function RoomSkeleton() {
 
 function RoomView({ api }: { api: RoomApi }) {
   const [openId, setOpenId] = useState<string | null>(null);
-  const closeSheet = useCallback(() => {
-    // The chip may have moved to another row (a new element), so find it by id, not by reference.
-    const id = openId;
-    setOpenId(null);
-    requestAnimationFrame(() =>
-      document.querySelector<HTMLElement>(`[data-frag-id="${id}"]`)?.focus({ preventScroll: true }),
-    );
-  }, [openId]);
+  // TierSheet puts focus back itself (on the chip, or on whatever opened it).
+  const closeSheet = useCallback(() => setOpenId(null), []);
   const room = api.room!;
   const base = `/r/${room.code}`;
   const open = openId ? api.fragrances.find((f) => f.id === openId) ?? null : null;
