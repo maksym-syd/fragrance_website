@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { RoomApi } from '../hooks/useRoom';
 import { accordOverlap, indexRankings, tierForValue } from '../lib/overlap';
 import type { Member } from '../lib/types';
-import { TierLetter } from './ui';
+import { SectionHead, TierLetter } from './ui';
 
 /** Average tier per accord, per person. Same reading as "By note", one level up. */
 export default function AccordsSection({ api, members }: { api: RoomApi; members: Member[] }) {
@@ -12,10 +12,7 @@ export default function AccordsSection({ api, members }: { api: RoomApi; members
   );
   return (
     <section className="stack-sm">
-      <header className="section-head">
-        <h2 className="h2">By accord</h2>
-        <span className="label">Average tier per person</span>
-      </header>
+      <SectionHead title="By accord" hint="Average tier per person" />
       {rows.length === 0 ? (
         <p className="muted">Add accords (woody, fresh, floral…) to ranked fragrances to compare the kinds of scent you each like.</p>
       ) : (

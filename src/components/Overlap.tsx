@@ -18,7 +18,7 @@ import {
   type PairMatch,
 } from '../lib/overlap';
 import type { Fragrance, Member } from '../lib/types';
-import { Empty, TierLetter } from './ui';
+import { Empty, SectionHead, TierLetter } from './ui';
 import AccordsSection from './AccordsSection';
 
 /** Jump links, most personal first. Each target id comes from its section's title (see SectionHead). */
@@ -29,6 +29,7 @@ const JUMPS = [
   ['everyone-loves', 'Loved'],
   ['most-divisive', 'Divisive'],
   ['by-note', 'Notes'],
+  ['by-accord', 'Accords'],
   ['side-by-side', 'All'],
 ];
 
@@ -189,15 +190,6 @@ export default function Overlap({ api, onOpen }: { api: RoomApi; onOpen: (id: st
         <SideBySide stats={a.table} members={members} fragById={fragById} tierOf={tierOf} onOpen={onOpen} />
       </section>
     </div>
-  );
-}
-
-function SectionHead({ title, hint }: { title: string; hint?: string }) {
-  return (
-    <header className="section-head" id={title.toLowerCase().replace(/\s+/g, '-')}>
-      <h2 className="h2">{title}</h2>
-      {hint && <span className="label">{hint}</span>}
-    </header>
   );
 }
 
@@ -451,7 +443,7 @@ function NotesSection({ notes, members }: { notes: NoteRow[]; members: Member[] 
     <section className="stack-sm">
       <SectionHead title="By note" hint="Average tier per person" />
       {top.length === 0 ? (
-        <p className="muted">Add notes tags (vanilla, citrus, oud…) to fragrances to see which accords you share.</p>
+        <p className="muted">Add notes (vanilla, citrus, oud…) to ranked fragrances to see which ones you share.</p>
       ) : (
         <>
           {insights.length > 0 && (

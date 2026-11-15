@@ -13,6 +13,16 @@ export function TierLetter({ tier, size = 'md', title }: { tier: Tier | null; si
   return <span className={`tier-letter tier-${tier.toLowerCase()} ${size}`} title={title}>{tier}</span>;
 }
 
+/** Section title with an optional hint. The id comes from the title, so jump links can target it. */
+export function SectionHead({ title, hint }: { title: string; hint?: string }) {
+  return (
+    <header className="section-head" id={title.toLowerCase().replace(/\s+/g, '-')}>
+      <h2 className="h2">{title}</h2>
+      {hint && <span className="label">{hint}</span>}
+    </header>
+  );
+}
+
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="empty">
