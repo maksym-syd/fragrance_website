@@ -207,9 +207,33 @@ describe('Joining by code', () => {
   });
 });
 
+// The app sends these deletes with .select(...) (DELETE ... RETURNING) and treats 0 rows as
+// "blocked": RLS gives a non-owner no error, just nothing deleted.
+describe('Owner-only deletes, as the app sends them', () => {
+  it('return 0 rows and no error for a member (here STRANGER, who joined by code)', async () => {
+    const room = await as(STRANGER, (q) => q('delete from public.rooms where id = $1 returning id', [roomId]));
+    expect(room.rows).toHaveLength(0);
+    const frag = await as(STRANGER, (q) => q('delete from public.fragrances where id = $1 returning id', [fragranceId]));
+    expect(frag.rows).toHaveLength(0);
+    // Their own invite row is visible to them, but only the owner may delete it.
+    const inv = await as(STRANGER, (q) =>
+      q('delete from public.invites where room_id = $1 and email = $2 returning email', [roomId, STRANGER.email]));
+    expect(inv.rows).toHaveLength(0);
+    expect(await count(OWNER, 'fragrances', roomId)).toBe(1);
+  });
+
+  it('return the deleted row for the owner', async () => {
+    await as(OWNER, (q) => q('insert into public.invites (room_id, email) values ($1, $2)', [roomId, 'temp@example.com']));
+    const inv = await as(OWNER, (q) =>
+      q('delete from public.invites where room_id = $1 and email = $2 returning email', [roomId, 'temp@example.com']));
+    expect(inv.rows).toHaveLength(1);
+  });
+});
+
 describe('RLS: owner', () => {
   it('can delete the room, cascading everything', async () => {
-    await as(OWNER, (q) => q('delete from public.rooms where id = $1', [roomId]));
+    const del = await as(OWNER, (q) => q('delete from public.rooms where id = $1 returning id', [roomId]));
+    expect(del.rows).toHaveLength(1);
     const left = await db.query<{ n: number }>('select count(*)::int as n from public.fragrances');
     expect(left.rows[0].n).toBe(0);
   });

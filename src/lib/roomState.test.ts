@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { afterLoad, tierFailLabel, unrankedLabel, type LoadState } from './roomState';
+import { afterLoad, requireRows, tierFailLabel, unrankedLabel, type LoadState } from './roomState';
 
 const s = (status: LoadState['status'], stale = false): LoadState => ({ status, stale });
 
@@ -42,5 +42,24 @@ describe('labels', () => {
   it('cope with a missing or very long name', () => {
     expect(tierFailLabel(undefined, 'A')).toBe('Couldn’t move that fragrance to A');
     expect(unrankedLabel('x'.repeat(80))).toHaveLength('Unranked '.length + 40);
+  });
+});
+
+describe('requireRows', () => {
+  const blocked = () => ({ message: 'blocked' });
+
+  it('treats 0 deleted rows (RLS said no, silently) as a failure', () => {
+    expect(requireRows({ data: [], error: null }, blocked)).toEqual({ data: null, error: { message: 'blocked' } });
+    expect(requireRows({ data: null, error: null }, blocked)).toEqual({ data: null, error: { message: 'blocked' } });
+  });
+
+  it('passes through a delete that removed rows', () => {
+    const res = { data: [{ id: 'r1' }], error: null };
+    expect(requireRows(res, blocked)).toBe(res);
+  });
+
+  it('keeps a real error rather than replacing it', () => {
+    const res = { data: null, error: { message: 'network down' } };
+    expect(requireRows(res, blocked)).toBe(res);
   });
 });

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { RoomApi } from '../hooks/useRoom';
 import { isEmail, normalizeEmail } from '../lib/normalize';
+import { ROOM_DELETE_BLOCKED } from '../lib/roomState';
 import { roomLink } from '../lib/site';
 import { ConfirmButton, CopyButton } from './ui';
 
@@ -192,6 +193,8 @@ function DangerZone({ api }: { api: RoomApi }) {
           setError('');
           const res = await api.deleteRoom();
           if (res.ok) navigate('/', { replace: true });
+          // RLS-blocked (0 rows) already reads as a full sentence; anything else gets wrapped.
+          else if (res.message === ROOM_DELETE_BLOCKED) setError(ROOM_DELETE_BLOCKED);
           else setError(`Couldn’t delete the room: ${res.message ?? 'something went wrong'}.`);
         }}
       />

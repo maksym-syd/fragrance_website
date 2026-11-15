@@ -4,7 +4,11 @@ import { dedupeKey } from '../lib/normalize';
 import { looseKey } from '../lib/reference';
 import {
   afterLoad,
+  FRAGRANCE_REMOVE_BLOCKED,
+  INVITE_REMOVE_BLOCKED,
   NOTICE_MS,
+  requireRows,
+  ROOM_DELETE_BLOCKED,
   shortName,
   tierFailLabel,
   unrankedLabel,
@@ -73,6 +77,9 @@ export function friendlyError(err: PostgrestError | Error | null | undefined): s
   if (code === '42501') return "You don't have permission to do that";
   return err.message || 'Something went wrong';
 }
+
+/** The error requireRows() reports when RLS silently deleted nothing. */
+const blocked = (message: string) => () => ({ message }) as PostgrestError;
 
 export function useRoom(code: string, user: User) {
   const [{ status, stale }, setLoadState] = useState<LoadState>({ status: 'loading', stale: false });
@@ -345,21 +352,20 @@ export function useRoom(code: string, user: User) {
   );
 
   /** Owner only, enforced by RLS. A blocked delete is 0 rows and no error, so count what came back. */
+
   const removeFragrance = useCallback(
     async (id: string) => {
-      if (!isOwner) return { ok: false, message: 'Only the room owner can remove a fragrance' };
+      if (!isOwner) return { ok: false, message: FRAGRANCE_REMOVE_BLOCKED };
       const name = dataRef.current.fragrances.find((x) => x.id === id)?.name;
       setData((d) => ({
         ...d,
         fragrances: d.fragrances.filter((x) => x.id !== id),
         rankings: d.rankings.filter((x) => x.fragrance_id !== id),
       }));
-      return track<Fragrance[]>(`Couldn’t remove ${shortName(name)}`, async () => {
-        const res = await db().from('fragrances').delete().eq('id', id).select();
-        if (res.error || res.data.length > 0) return res;
-        // Reported as a failure so track() shows it and reloads, bringing the bottle back.
-        return { data: null, error: { message: 'Could not remove that fragrance' } as PostgrestError };
-      });
+      // A blocked delete is reported as a failure, so track() shows it and reloads, bringing the bottle back.
+      return track(`Couldn’t remove ${shortName(name)}`, async () =>
+        requireRows(await db().from('fragrances').delete().eq('id', id).select('id'), blocked(FRAGRANCE_REMOVE_BLOCKED)),
+      );
     },
     [isOwner, track],
   );
@@ -448,7 +454,12 @@ export function useRoom(code: string, user: User) {
   const removeInvite = useCallback(
     async (email: string) => {
       if (!roomId) return { ok: false };
-      const res = await track(`Couldn’t remove ${email}`, () => db().from('invites').delete().eq('room_id', roomId).eq('email', email));
+      const res = await track(`Couldn’t remove ${email}`, async () =>
+        requireRows(
+          await db().from('invites').delete().eq('room_id', roomId).eq('email', email).select('email'),
+          blocked(INVITE_REMOVE_BLOCKED),
+        ),
+      );
       // Server-side trigger also removes their membership and rankings; reflect that.
       if (res.ok) await load();
       return res;
@@ -458,7 +469,9 @@ export function useRoom(code: string, user: User) {
 
   const deleteRoom = useCallback(async () => {
     if (!roomId) return { ok: false };
-    return track('Couldn’t delete the room', () => db().from('rooms').delete().eq('id', roomId));
+    return track('Couldn’t delete the room', async () =>
+      requireRows(await db().from('rooms').delete().eq('id', roomId).select('id'), blocked(ROOM_DELETE_BLOCKED)),
+    );
   }, [roomId, track]);
 
   return {

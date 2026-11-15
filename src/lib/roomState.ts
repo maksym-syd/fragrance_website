@@ -21,6 +21,23 @@ export function afterLoad(prev: LoadState, outcome: LoadOutcome): LoadState {
   return { status: 'error', stale: false };
 }
 
+/**
+ * RLS turns a DELETE you aren't allowed to make into "0 rows, no error". With `.select('id')` on
+ * the delete, an empty result means nothing was removed, so report it as an error.
+ */
+export function requireRows<T, E>(
+  res: { data: T[] | null; error: E | null },
+  blocked: () => E,
+): { data: T[] | null; error: E | null } {
+  if (res.error) return res;
+  if (!res.data || res.data.length === 0) return { data: null, error: blocked() };
+  return res;
+}
+
+export const ROOM_DELETE_BLOCKED = 'Couldn’t delete the room. Only the owner can delete it.';
+export const FRAGRANCE_REMOVE_BLOCKED = 'Only the room owner can remove a fragrance';
+export const INVITE_REMOVE_BLOCKED = 'Only the room owner can remove an invite';
+
 /** How long a toast stays up before clearing itself. */
 export const NOTICE_MS = 6000;
 
