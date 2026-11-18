@@ -3,8 +3,12 @@
 import {
   normalizeNote,
   tagOverlap,
+  TIERS,
+  tierForValue,
+  type PairMatch,
   type RankIndex,
   type TagRow,
+  type Tier,
 } from './overlap';
 import { canonicalHouse } from './reference';
 
@@ -245,4 +249,101 @@ export function strictness(memberId: string, baselines: Map<string, Baseline>): 
   const gap = mine.mean - roomMean;
   const verdict = gap >= STRICT_GAP ? 'generous' : gap <= -STRICT_GAP ? 'tough' : 'typical';
   return { mean: mine.mean, roomMean, verdict };
+}
+
+// ---------------------------------------------------------------------------
+// "You vs a friend": every shared bottle on a 5×5 grid of your tier against theirs.
+// ---------------------------------------------------------------------------
+
+/** Tiers apart before a bottle counts as a split worth naming. */
+export const SPLIT_GAP = 2;
+
+/** Tiers from D to S: the order of both axes, low to high. */
+export const AXIS: Tier[] = [...TIERS].reverse();
+
+export interface VersusCell {
+  mine: Tier;
+  theirs: Tier;
+  /** Shared bottles that land here, in name order. */
+  ids: string[];
+}
+
+export interface VersusSplit {
+  fragrance_id: string;
+  mine: Tier;
+  theirs: Tier;
+  /** Tiers apart, 2–4. */
+  gap: number;
+}
+
+export interface Versus {
+  common: number;
+  /** As drawn: rows top to bottom are their S → D, columns left to right are my D → S. */
+  rows: VersusCell[][];
+  /** Largest cell count, for scaling marks. */
+  max: number;
+  /** Bottles on the diagonal. */
+  same: number;
+  /** Bottles at most one tier apart (includes the diagonal). */
+  within1: number;
+  /** The widest gap (SPLIT_GAP+), ties by name; null when nothing is that far apart. */
+  split: VersusSplit | null;
+}
+
+export function versus(
+  meId: string,
+  otherId: string,
+  idx: RankIndex,
+  nameOf: (fragranceId: string) => string = (id) => id,
+): Versus {
+  const mine = idx.get(meId) ?? new Map<string, number>();
+  const theirs = idx.get(otherId) ?? new Map<string, number>();
+  const rows: VersusCell[][] = TIERS.map((t) => AXIS.map((m) => ({ mine: m, theirs: t, ids: [] as string[] })));
+  let common = 0;
+  let same = 0;
+  let within1 = 0;
+  let split: VersusSplit | null = null;
+  const byName = (a: string, b: string) => nameOf(a).localeCompare(nameOf(b)) || a.localeCompare(b);
+
+  for (const [fid, a] of mine) {
+    const b = theirs.get(fid);
+    if (b === undefined) continue; // B is 0, so test for missing, not falsy
+    common++;
+    const m = tierForValue(a);
+    const t = tierForValue(b);
+    rows[TIERS.indexOf(t)][AXIS.indexOf(m)].ids.push(fid);
+    const gap = Math.abs(a - b);
+    if (gap === 0) same++;
+    if (gap <= 1) within1++;
+    if (gap >= SPLIT_GAP && (!split || gap > split.gap || (gap === split.gap && byName(fid, split.fragrance_id) < 0))) {
+      split = { fragrance_id: fid, mine: m, theirs: t, gap };
+    }
+  }
+  let max = 0;
+  for (const row of rows) {
+    for (const cell of row) {
+      cell.ids.sort(byName);
+      max = Math.max(max, cell.ids.length);
+    }
+  }
+  return { common, rows, max, same, within1, split };
+}
+
+/** "Same tier on 9 of 15 · within one tier on 13 · biggest split: Aventus (you S, Ken D)". */
+export function versusSummary(v: Versus, friend: string, nameOf: (fragranceId: string) => string): string {
+  if (v.common === 0) return `You and ${friend} haven’t ranked any of the same bottles yet`;
+  const parts = [`Same tier on ${v.same} of ${v.common}`, `within one tier on ${v.within1}`];
+  parts.push(
+    v.split
+      ? `biggest split: ${nameOf(v.split.fragrance_id)} (you ${v.split.mine}, ${friend} ${v.split.theirs})`
+      : `no splits of ${SPLIT_GAP}+ tiers`,
+  );
+  return parts.join(' · ');
+}
+
+/** Who to compare with first: the closest match by shrunk score, else the first other member. */
+export function defaultFriend(meId: string, memberIds: string[], pairs: PairMatch[]): string | null {
+  const best = pairs.find((p) => (p.a === meId || p.b === meId) && p.score !== null);
+  if (best) return best.a === meId ? best.b : best.a;
+  return memberIds.find((id) => id !== meId) ?? null;
 }

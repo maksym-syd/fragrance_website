@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { allPairs, indexRankings, tagOverlap, tryNext, type RankingLike, type Tier } from './overlap';
 import {
+  AXIS,
   confidence,
+  defaultFriend,
   divide,
   lift,
   memberBaselines,
@@ -11,6 +13,8 @@ import {
   sortByDivide,
   strictness,
   tagInsights,
+  versus,
+  versusSummary,
   withLift,
   type TasteFragrance,
 } from './taste';
@@ -227,5 +231,100 @@ describe('tables: divide, sorting, insights', () => {
     const flat = indexRankings(r({ ana: { o1: 'S', o2: 'S', v1: 'S', v2: 'S' }, ken: { o1: 'A', o2: 'A', v1: 'A', v2: 'A' } }));
     const flatRows = withLift(tagOverlap(frags, flat, (f) => f.notes), memberBaselines(flat));
     expect(tagInsights(flatRows, (id) => names[id])).toEqual([]);
+  });
+});
+
+describe('versus (You vs a friend)', () => {
+  const NAMES: Record<string, string> = { av: 'Aventus', bl: 'Baccarat', cd: 'Chanel 5', dk: 'Dior Homme', ex: 'Eros', xx: 'Zzz' };
+  const nameOf = (id: string) => NAMES[id] ?? id;
+  const idx = indexRankings(
+    r({
+      me: { av: 'S', bl: 'B', cd: 'A', dk: 'D', ex: 'C', only: 'S' },
+      ken: { av: 'D', bl: 'B', cd: 'B', dk: 'B', ex: 'C', theirs: 'A' },
+    }),
+  );
+  const v = versus('me', 'ken', idx, nameOf);
+
+  it('counts only shared bottles, B (0) included', () => {
+    expect(v.common).toBe(5);
+    expect(v.same).toBe(2); // bl B/B, ex C/C
+    expect(v.within1).toBe(3); // + cd A/B
+  });
+
+  it('lays the grid out as drawn: their S at the top, my D on the left', () => {
+    expect(AXIS).toEqual(['D', 'C', 'B', 'A', 'S']);
+    expect(v.rows).toHaveLength(5);
+    expect(v.rows.every((row) => row.length === 5)).toBe(true);
+    expect(v.rows[0][0]).toMatchObject({ theirs: 'S', mine: 'D' });
+    expect(v.rows[4][4]).toMatchObject({ theirs: 'D', mine: 'S' });
+    expect(v.rows[4][4].ids).toEqual(['av']); // you S, Ken D: bottom right
+    expect(v.rows[2][2].ids).toEqual(['bl']); // B/B: the centre
+    // their B row, sorted by name: Chanel 5 (me A), Dior Homme (me D)
+    expect(v.rows[2][3].ids).toEqual(['cd']);
+    expect(v.rows[2][0].ids).toEqual(['dk']);
+    const total = v.rows.flat().reduce((s, c) => s + c.ids.length, 0);
+    expect(total).toBe(5);
+    expect(v.max).toBe(1);
+  });
+
+  it('names the widest split, ties broken by name', () => {
+    expect(v.split).toEqual({ fragrance_id: 'av', mine: 'S', theirs: 'D', gap: 4 });
+    const tie = versus('a', 'b', indexRankings(r({ a: { xx: 'S', av: 'S' }, b: { xx: 'B', av: 'B' } })), nameOf);
+    expect(tie.split?.fragrance_id).toBe('av');
+    expect(tie.rows[2][4].ids).toEqual(['av', 'xx']);
+  });
+
+  it('only calls 2+ tiers a split', () => {
+    const close = versus('a', 'b', indexRankings(r({ a: { x: 'S', y: 'B' }, b: { x: 'A', y: 'B' } })));
+    expect(close.split).toBeNull();
+    expect(versusSummary(close, 'Ken', nameOf)).toBe('Same tier on 1 of 2 · within one tier on 2 · no splits of 2+ tiers');
+  });
+
+  it('writes the summary line', () => {
+    expect(versusSummary(v, 'Ken', nameOf)).toBe(
+      'Same tier on 2 of 5 · within one tier on 3 · biggest split: Aventus (you S, Ken D)',
+    );
+  });
+
+  it('handles nothing shared and unknown members', () => {
+    const none = versus('me', 'ghost', idx);
+    expect(none).toMatchObject({ common: 0, same: 0, within1: 0, max: 0, split: null });
+    expect(versusSummary(none, 'Ghost', nameOf)).toMatch(/haven’t ranked any of the same/);
+  });
+
+  it('works on the 15-shared example: 9 same, 13 within one', () => {
+    const t: Tier[] = ['S', 'A', 'B', 'C', 'D'];
+    const a: Record<string, Tier> = {};
+    const b: Record<string, Tier> = {};
+    for (let i = 0; i < 9; i++) [a[`s${i}`], b[`s${i}`]] = [t[i % 5], t[i % 5]];
+    for (let i = 0; i < 4; i++) [a[`n${i}`], b[`n${i}`]] = ['A', 'B'];
+    [a.av, b.av] = ['S', 'D'];
+    [a.z, b.z] = ['C', 'S'];
+    const big = versus('me', 'ken', indexRankings(r({ me: a, ken: b })), nameOf);
+    expect(versusSummary(big, 'Ken', nameOf)).toBe(
+      'Same tier on 9 of 15 · within one tier on 13 · biggest split: Aventus (you S, Ken D)',
+    );
+  });
+});
+
+describe('defaultFriend', () => {
+  it('picks the closest match by shrunk score, not raw %', () => {
+    const spec: Record<string, Record<string, Tier>> = { me: {}, lucky: {}, steady: {} };
+    // lucky: 2 shared, identical (100%). steady: 15 shared, mostly identical.
+    spec.me.l1 = 'S'; spec.lucky.l1 = 'S';
+    spec.me.l2 = 'A'; spec.lucky.l2 = 'A';
+    for (let i = 0; i < 15; i++) {
+      spec.me[`s${i}`] = 'A';
+      spec.steady[`s${i}`] = i < 3 ? 'B' : 'A';
+    }
+    const idx = indexRankings(r(spec));
+    const ids = ['me', 'lucky', 'steady'];
+    expect(defaultFriend('me', ids, allPairs(ids, idx))).toBe('steady');
+  });
+
+  it('falls back to the first other member when no one has a score', () => {
+    const idx = indexRankings(r({ me: { a: 'S' }, x: { b: 'S' } }));
+    expect(defaultFriend('me', ['me', 'x', 'y'], allPairs(['me', 'x', 'y'], idx))).toBe('x');
+    expect(defaultFriend('me', ['me'], [])).toBeNull();
   });
 });
