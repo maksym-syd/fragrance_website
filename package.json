@@ -14,7 +14,8 @@
     "export": "tsx scripts/export.ts",
     "backup": "tsx scripts/backup.ts",
     "build-catalog": "tsx scripts/build-catalog.ts",
-    "backfill": "tsx scripts/backfill-details.ts"
+    "backfill": "tsx scripts/backfill-details.ts",
+    "restore": "tsx scripts/restore.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
