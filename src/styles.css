@@ -846,6 +846,30 @@ kbd {
 @media (hover: hover) and (pointer: fine) { .seg button { min-height: 36px; } }
 /* ▲ ▼ next to an average: half a tier or more from that person's own average. */
 .lift { font-size: 10px; line-height: 1; color: var(--ink-2); }
+.seg-scroll { overflow-x: auto; scrollbar-width: none; }
+.seg-scroll button { flex: none; }
+
+/* Your nose */
+.nose-card { padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.nose-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+@media (min-width: 640px) { .nose-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; } }
+.nose-col > * + * { margin-top: 6px; }
+.nose-list { display: grid; gap: 2px; }
+.nose-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: 'tag lift count' 'kind lift count';
+  align-items: center;
+  column-gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.nose-list li:last-child { border-bottom: 0; }
+.nose-tag { grid-area: tag; font-weight: 500; overflow-wrap: anywhere; }
+.nose-kind { grid-area: kind; font-size: 12px; color: var(--muted); }
+.nose-lift { grid-area: lift; font-weight: 600; }
+.nose-count { grid-area: count; font-size: 12px; min-width: 2ch; text-align: right; }
+.nose-streaks { display: grid; gap: 4px; font-size: 14px; }
 /* "S +2 · A +1 · B 0 · C −1 · D −2" under anything that shows an average. */
 .scale-legend { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .insights li {

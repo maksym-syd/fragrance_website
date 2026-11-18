@@ -24,9 +24,11 @@ import type { Fragrance, Member } from '../lib/types';
 import { Empty, SectionHead, TierLetter } from './ui';
 import AccordsSection from './AccordsSection';
 import TagTable from './TagTable';
+import YourNose from './YourNose';
 
 /** Jump links, most personal first. Each target id comes from its section's title (see SectionHead). */
 const JUMPS = [
+  ['your-nose', 'Nose'],
   ['taste-match', 'Matches'],
   ['try-next', 'Try next'],
   ['similarity-map', 'Map'],
@@ -72,12 +74,18 @@ export default function Overlap({ api, onOpen }: { api: RoomApi; onOpen: (id: st
     };
   }, [api.rankings, api.fragrances, memberIds.join(','), me.id]);
 
+  const nose = <YourNose meId={me.id} members={members} fragrances={api.fragrances} idx={a.idx} />;
+
   if (api.members.length < 2) {
+    // Your nose needs nobody else, so it shows even before a friend joins.
     return (
-      <Empty title="Only you here so far">
-        <p>Overlap compares tastes, so it needs at least two people. Share the room link or code with a friend.</p>
-        <Link to="../members" className="btn btn-primary">Get the room link</Link>
-      </Empty>
+      <div className="overlap stack-lg">
+        {api.rankings.length > 0 && nose}
+        <Empty title="Only you here so far">
+          <p>Overlap compares tastes, so it needs at least two people. Share the room link or code with a friend.</p>
+          <Link to="../members" className="btn btn-primary">Get the room link</Link>
+        </Empty>
+      </div>
     );
   }
   if (api.rankings.length === 0) {
@@ -100,6 +108,8 @@ export default function Overlap({ api, onOpen }: { api: RoomApi; onOpen: (id: st
       <nav className="overlap-nav" aria-label="Jump to section">
         {JUMPS.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
       </nav>
+
+      {nose}
 
       <section className="stack-sm">
         <SectionHead title="Taste match" />
