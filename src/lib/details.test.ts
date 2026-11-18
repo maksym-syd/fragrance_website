@@ -126,8 +126,8 @@ describe('accordOverlap', () => {
   it('averages tiers per accord, per member, normalizing tags', () => {
     const rows = accordOverlap([{ id: 'f1', accords: ['Woody'] }, { id: 'f2', accords: ['woody ', 'fresh'] }], idx);
     expect(rows.map((r) => r.tag)).toEqual(['woody', 'fresh']);
-    expect(rows[0].perMember.get('a')).toEqual({ avg: 4, count: 2 });
-    expect(rows[0].perMember.get('b')).toEqual({ avg: 1, count: 1 });
+    expect(rows[0].perMember.get('a')).toEqual({ avg: 1, count: 2 });
+    expect(rows[0].perMember.get('b')).toEqual({ avg: -2, count: 1 });
   });
 
   it('ignores rows without accords', () => {

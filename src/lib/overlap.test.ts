@@ -8,6 +8,8 @@ import {
   similarityMatrix,
   sortedByAverage,
   tasteMatch,
+  formatScore,
+  TIER_VALUE,
   tierForValue,
   tryNext,
   type RankingLike,
@@ -149,9 +151,9 @@ describe('noteOverlap', () => {
     const rows = noteOverlap(fragrances, idx);
     expect(rows.map((n) => n.note)).toEqual(['vanilla', 'oud']);
     const vanilla = rows[0];
-    expect(vanilla.perMember.get('ana')).toEqual({ avg: 4.5, count: 2 });
-    expect(vanilla.perMember.get('ken')).toEqual({ avg: 3, count: 2 });
-    expect(rows[1].perMember.get('ken')).toEqual({ avg: 1, count: 1 });
+    expect(vanilla.perMember.get('ana')).toEqual({ avg: 1.5, count: 2 });
+    expect(vanilla.perMember.get('ken')).toEqual({ avg: 0, count: 2 });
+    expect(rows[1].perMember.get('ken')).toEqual({ avg: -2, count: 1 });
   });
 
   it('nothing ranked → no rows', () => {
@@ -166,9 +168,37 @@ describe('sortedByAverage / tierForValue', () => {
   });
 
   it('maps averages to nearest tier', () => {
-    expect(tierForValue(5)).toBe('S');
-    expect(tierForValue(4.4)).toBe('A');
-    expect(tierForValue(2.5)).toBe('B');
-    expect(tierForValue(1)).toBe('D');
+    expect(tierForValue(2)).toBe('S');
+    expect(tierForValue(1.4)).toBe('A');
+    expect(tierForValue(0.4)).toBe('B');
+    expect(tierForValue(0)).toBe('B');
+    expect(tierForValue(-0.6)).toBe('C');
+    expect(tierForValue(-2)).toBe('D');
+    expect(tierForValue(9)).toBe('S');
+    expect(tierForValue(-9)).toBe('D');
+  });
+});
+
+describe('±2 scale', () => {
+  it('centres on B with a range of 4', () => {
+    expect(TIER_VALUE).toEqual({ S: 2, A: 1, B: 0, C: -1, D: -2 });
+  });
+
+  it('a B ranking (value 0) still counts as ranked everywhere', () => {
+    const idx = indexRankings(r({ a: { x: 'B', y: 'B', z: 'S' }, b: { x: 'B', y: 'B' } }));
+    expect(tasteMatch(idx.get('a'), idx.get('b'))).toEqual({ common: 2, score: 100 });
+    expect(sortedByAverage(idx).find((s) => s.fragrance_id === 'x')).toMatchObject({ count: 2, avg: 0 });
+    // b hasn't ranked z, which a rated S, and B-ranked x/y are not offered again.
+    expect(tryNext('b', ['a', 'b'], idx).fragranceIds).toEqual(['z']);
+  });
+
+  it('formats scores with a sign, one decimal and no sign on zero', () => {
+    expect(formatScore(0.8)).toBe('+0.8');
+    expect(formatScore(-1.24)).toBe('−1.2');
+    expect(formatScore(2)).toBe('+2');
+    expect(formatScore(-1)).toBe('−1');
+    expect(formatScore(0)).toBe('0');
+    expect(formatScore(0.04)).toBe('0');
+    expect(formatScore(-0.04)).toBe('0');
   });
 });

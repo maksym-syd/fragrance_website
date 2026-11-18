@@ -209,7 +209,7 @@ src/components/                   MyTiers (dnd-kit), TierSheet, Overlap, Accords
 ```
 
 ## Scoring
-Tiers count as S=5, A=4, B=3, C=2, D=1; no ranking means "haven't tried".
+Tiers count as S = +2, A = +1, B = 0, C = −1, D = −2; no ranking means "haven't tried". Averages are shown with a sign (+0.8, −1.2, 0), and the export's `score` columns use the same scale.
 - **Taste match** for a pair = `100 − mean(|diff|) / 4 × 100` over the fragrances both people ranked. It needs at least 2 in common.
 - **Everyone loves:** ranked by 2+ people, and every one of them gave A or better.
 - **Most divisive:** highest minus lowest tier ≥ 3.

@@ -4,11 +4,13 @@ import type { RoomApi } from '../hooks/useRoom';
 import {
   allPairs,
   everyoneLoves,
+  formatScore,
   indexRankings,
   MIN_COMMON,
   mostDivisive,
   noteOverlap,
   similarityMatrix,
+  SCALE_LEGEND,
   sortedByAverage,
   TIERS,
   tierForValue,
@@ -85,8 +87,9 @@ export default function Overlap({ api, onOpen }: { api: RoomApi; onOpen: (id: st
   }
 
   const tierOf = (memberId: string, fid: string) => {
+    // B is 0 on the ±2 scale, so test for a missing value, not a falsy one.
     const v = a.idx.get(memberId)?.get(fid);
-    return v ? tierForValue(v) : null;
+    return v === undefined ? null : tierForValue(v);
   };
 
   return (
@@ -187,6 +190,7 @@ export default function Overlap({ api, onOpen }: { api: RoomApi; onOpen: (id: st
 
       <section className="stack-sm">
         <SectionHead title="Side by side" hint="Sorted by group average" />
+        <p className="scale-legend">Average on {SCALE_LEGEND}</p>
         <SideBySide stats={a.table} members={members} fragById={fragById} tierOf={tierOf} onOpen={onOpen} />
       </section>
     </div>
@@ -468,7 +472,7 @@ function NotesSection({ notes, members }: { notes: NoteRow[]; members: Member[] 
                       return (
                         <td key={m.id}>
                           {v ? (
-                            <span className="cell-avg" title={`avg ${v.avg.toFixed(1)} over ${v.count}`}>
+                            <span className="cell-avg" title={`average ${formatScore(v.avg)} over ${v.count}`}>
                               <TierLetter tier={tierForValue(v.avg)} size="sm" />
                               <span className="num fine muted">{v.count}</span>
                             </span>
@@ -526,7 +530,7 @@ function SideBySide({
                         <span className="muted fine">{f.house}</span>
                       </button>
                     </th>
-                    <td className="num small">{s.avg.toFixed(1)}</td>
+                    <td className="num small">{formatScore(s.avg)}</td>
                     {members.map((m) => <td key={m.id}><TierLetter tier={tierOf(m.id, f.id)} size="sm" /></td>)}
                   </tr>
                 );

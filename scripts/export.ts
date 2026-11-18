@@ -119,7 +119,7 @@ async function main() {
     joined_at: m.joined_at,
   }));
 
-  // 4. Wide matrix per room: fragrance rows x member columns, score 1-5 (blank = not rated).
+  // 4. Wide matrix per room: fragrance rows x member columns, score −2…+2 (S +2 … D −2; blank = not rated).
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
   const dir = join('exports', stamp);
   mkdirSync(dir, { recursive: true });

@@ -821,6 +821,8 @@ kbd {
 .frag-row-tiers { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex: none; max-width: 50%; }
 
 .insights { display: flex; flex-wrap: wrap; gap: 8px; }
+/* "S +2 · A +1 · B 0 · C −1 · D −2" under anything that shows an average. */
+.scale-legend { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .insights li {
   font-family: var(--font-display);
   font-size: 1.25rem;

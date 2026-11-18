@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { RoomApi } from '../hooks/useRoom';
-import { accordOverlap, indexRankings, tierForValue } from '../lib/overlap';
+import { accordOverlap, formatScore, indexRankings, tierForValue } from '../lib/overlap';
 import type { Member } from '../lib/types';
 import { SectionHead, TierLetter } from './ui';
 
@@ -33,7 +33,7 @@ export default function AccordsSection({ api, members }: { api: RoomApi; members
                     return (
                       <td key={m.id}>
                         {v ? (
-                          <span className="cell-avg" title={`avg ${v.avg.toFixed(1)} over ${v.count}`}>
+                          <span className="cell-avg" title={`average ${formatScore(v.avg)} over ${v.count}`}>
                             <TierLetter tier={tierForValue(v.avg)} size="sm" />
                             <span className="mono fine muted">{v.count}</span>
                           </span>

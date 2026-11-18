@@ -2,7 +2,19 @@
 
 export type Tier = 'S' | 'A' | 'B' | 'C' | 'D';
 export const TIERS: Tier[] = ['S', 'A', 'B', 'C', 'D'];
-export const TIER_VALUE: Record<Tier, number> = { S: 5, A: 4, B: 3, C: 2, D: 1 };
+/** Centred on B, so a sign reads as a verdict: + liked, 0 fine, − disliked. The range is 4 either way. */
+export const TIER_VALUE: Record<Tier, number> = { S: 2, A: 1, B: 0, C: -1, D: -2 };
+
+/** The scale in words, for legends next to averages. */
+export const SCALE_LEGEND = 'S +2 · A +1 · B 0 · C −1 · D −2';
+
+/** "+0.8", "−1.2", "0": one decimal, a real minus sign, and no sign on zero. */
+export function formatScore(v: number): string {
+  const r = Math.round(v * 10) / 10;
+  if (r === 0) return '0';
+  const s = Math.abs(r).toFixed(1).replace(/\.0$/, '');
+  return r > 0 ? `+${s}` : `−${s}`;
+}
 
 export interface RankingLike {
   member_id: string;
@@ -14,7 +26,7 @@ export interface FragranceLike {
   notes: string[];
 }
 
-/** member_id -> fragrance_id -> tier value (1..5) */
+/** member_id -> fragrance_id -> tier value (−2..+2). B is 0, so check `=== undefined`, not truthiness. */
 export type RankIndex = Map<string, Map<string, number>>;
 
 export const MIN_COMMON = 2;
@@ -211,6 +223,6 @@ export function sortedByAverage(idx: RankIndex): FragranceStats[] {
 
 /** Nearest tier letter for an average value (used for coloring averages). */
 export function tierForValue(v: number): Tier {
-  const r = Math.min(5, Math.max(1, Math.round(v)));
-  return TIERS[5 - r];
+  const r = Math.min(2, Math.max(-2, Math.round(v)));
+  return TIERS[2 - r];
 }
