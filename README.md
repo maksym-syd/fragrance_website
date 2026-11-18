@@ -139,6 +139,8 @@ Migrations 003 and 004 are independent of each other and can go in either order,
 Each file ends with its rollback SQL in a comment. Export `audit_log` before rolling back 005.
 
 ### Restoring rows from the audit log
+For deleted rooms, members, bottles and rankings, use `npm run restore` (see "Restoring data" below); it does the same as the SQL here with safety checks. The SQL is for cases the script doesn't cover, such as undoing an edit.
+
 Only the SQL Editor (or the service role) can read `audit_log`. The app can't. Find what was lost:
 ```sql
 select id, at, actor, table_name, op, old_row
@@ -168,6 +170,69 @@ where a.id = <audit id> and f.id = o.id;
 ```
 That update is itself logged, so it can be undone the same way. The log grows forever; prune it by hand if needed (`delete from public.audit_log where at < now() - interval '1 year';`).
 
+## Scheduled backups
+
+**What Supabase Free keeps:** nothing you can restore yourself. Free projects get no daily backups to download or restore from the dashboard and no point-in-time recovery (both are paid features; check Supabase's pricing page for the current details). Your own `npm run backup` folders and `audit_log` are the only copies. `npm run backup` saves all five app tables **and `audit_log`**, so deleted rows survive even if the log is pruned later.
+
+To run it weekly on this Mac with launchd (Sundays at 20:00):
+
+1. Run `npm run backup` once by hand so `exports/` exists and you know it works.
+2. Copy the template and fill in the paths:
+   ```bash
+   cp scripts/backup.launchd.plist.example ~/Library/LaunchAgents/com.scenttiers.backup.plist
+   pwd                     # the repo folder: replace /ABSOLUTE/PATH/TO/REPO (3 places)
+   dirname "$(which npm)"  # replace /ABSOLUTE/DIR/OF/NPM (2 places); node must live there too
+   plutil -lint ~/Library/LaunchAgents/com.scenttiers.backup.plist
+   ```
+3. Load it, and check that it is registered:
+   ```bash
+   launchctl load ~/Library/LaunchAgents/com.scenttiers.backup.plist
+   launchctl list | grep scenttiers                      # a line means it's loaded
+   launchctl start com.scenttiers.backup                 # optional: run once now
+   tail exports/backup.log                               # each run ends with "-> exports/backup-<time>/"
+   ```
+4. To stop it: `launchctl unload ~/Library/LaunchAgents/com.scenttiers.backup.plist`, then delete the file.
+
+If the Mac is asleep at the scheduled time, launchd runs the job when it wakes; if it is shut down, that week is skipped. If the repo lives in Documents, Desktop or iCloud Drive, macOS may block the job until you give `npm`/`node` access under **System Settings → Privacy & Security → Files and Folders**. `exports/backup.log` will show the error.
+
+**Keep a copy off this Mac.** A backup on the same laptop dies with the laptop. Every so often, copy the newest `exports/backup-<time>/` folder to an encrypted external disk or a private cloud folder. The backups contain your friends' email addresses, so never put them anywhere shared or public.
+
+**Old backups are never deleted automatically.** Each one is small. Prune by hand when you want to, keeping at least the last few and any taken before a big change: `ls -d exports/backup-*`, then `rm -r exports/backup-<time>` for the ones you no longer need.
+
+## Restoring data
+
+`npm run restore` puts deleted rows back into **one room**, from `audit_log` (`--from-audit`, covers everything deleted since 005 was applied) or from a backup folder (`--from exports/backup-<time>`). It only inserts rows that are missing, parents first (rooms → invites → members → fragrances → rankings). It never changes or deletes an existing row, so anything edited since is kept as it is. Rows that can't go back cleanly are skipped and listed with the reason. Examples: the owner's or member's account no longer exists; the person rejoined under a new membership; someone else took the display name; the room has the same bottle again under a new id; a ranking whose member or bottle is missing.
+
+It is a **dry run by default**: it prints, per table, how many rows it would restore, how many are already there and how many it skips, plus the skip list. Read that first. Then add `--apply --project=<ref>`. That takes a fresh backup (and prints where), inserts, and prints the counts actually inserted. supabase-js can't run a transaction, so a failed write stops at once and reports what got in. Re-running is safe: rows already back are left alone, and a second run inserts nothing.
+
+Times are ISO and best given in UTC (`2026-11-18T19:00:00Z`). To find when something was deleted, and a deleted room's code, use the SQL Editor:
+```sql
+select at, table_name, old_row->>'code' as code, old_row->>'name' as name, old_row->>'display_name' as member
+from public.audit_log where op = 'DELETE' order by id desc limit 50;
+```
+
+**An accidentally deleted room** (everything in it comes back, identical, including ids):
+```bash
+npm run restore -- --room K7P2QX --from-audit --since 2026-11-18T18:00:00Z
+npm run restore -- --room K7P2QX --from-audit --since 2026-11-18T18:00:00Z --apply --project=<ref>
+```
+If it was deleted before 005 was applied, use the last backup instead: `--from exports/backup-<time>`.
+
+**A removed member's rankings** (owner clicked Remove on Ken): `--member` restores Ken's invite, membership and rankings, nothing else.
+```bash
+npm run restore -- --room K7P2QX --from-audit --since 2026-11-18T18:00:00Z --member Ken
+npm run restore -- --room K7P2QX --from-audit --since 2026-11-18T18:00:00Z --member Ken --apply --project=<ref>
+```
+If Ken already rejoined, his new membership has a new id, so the old one and its rankings are skipped. In that case Ken re-ranks, or you copy the tiers over by hand in SQL. Bottles Ken had added lose their "added by" when he is removed, and an insert-only restore doesn't put that back.
+
+**An unranked bottle** (Ken tapped "Haven't tried" on Aventus): combine `--member` and `--fragrance` to bring back exactly that one ranking.
+```bash
+npm run restore -- --room K7P2QX --from-audit --since 2026-11-18T18:00:00Z --member Ken --fragrance Aventus
+```
+then the same with `--apply --project=<ref>`. A bottle the owner removed comes back with `--fragrance Aventus` alone, together with everyone's rankings of it.
+
+Use `--until <time>` to stop at a time, for example so a deliberate deletion afterwards is not undone. `--member` and `--fragrance` need the room to still exist; to restore a deleted room, run without them. Edits are not restored: to undo a fragrance edit, use the SQL under "Restoring rows from the audit log" above.
+
 ## Reference catalog
 
 Autocomplete comes from a static file, `public/catalog/catalog-<hash>.json` (about 42,000 fragrances, 3.2 MB raw, 0.9 MB gzipped). It's fetched only on the Add and edit screens and is never in the JS bundle. If it fails to load, every field still works as plain text.
@@ -194,7 +259,9 @@ supabase/migrations/005_*.sql     audit_log: copy of every deleted row and every
 supabase/migrations/006_*.sql     an owner's auth account can't be deleted while they own a room
 scripts/seed.ts                   demo room (flags + --project + service key)
 scripts/verify-rls.ts             live RLS check
-scripts/backup.ts                 read-only full JSON backup
+scripts/backup.ts                 read-only full JSON backup of all tables + audit_log (logic in scripts/lib/backup.ts)
+scripts/backup.launchd.plist.example  weekly backup on this Mac (see Scheduled backups)
+scripts/restore.ts                insert-only restore of one room from audit_log or a backup (logic in scripts/lib/restore.ts)
 scripts/build-catalog.ts          Parfumo CSV -> public/catalog/
 scripts/backfill-details.ts       plan, then apply, fragrance details (logic in scripts/lib/)
 src/lib/overlap.ts                pure scoring math (+ overlap.test.ts)
@@ -204,6 +271,8 @@ src/lib/reference.ts              reviewed house, typo and accord maps
 src/lib/details.ts                form, catalog and row conversions
 src/lib/rls.test.ts               RLS policy tests in PGlite
 src/lib/backfill.test.ts          migration and backfill tests in PGlite
+src/lib/audit.test.ts             005/006 tests in PGlite
+src/lib/restore.test.ts           restore tests in PGlite
 src/hooks/useRoom.ts              room data, realtime subscription, optimistic writes
 src/pages/                        SignIn, Home, Room (+ not-invited and join screens)
 src/components/                   MyTiers (dnd-kit), TierSheet, Overlap, YourNose, TagTable, AccordsSection, AddFragrance, FragranceForm, Combobox, TokenInput, MembersPanel, ExportBoard
