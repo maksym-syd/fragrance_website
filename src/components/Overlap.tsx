@@ -23,13 +23,16 @@ import { memberBaselines } from '../lib/taste';
 import type { Fragrance, Member } from '../lib/types';
 import { Empty, SectionHead, TierLetter } from './ui';
 import AccordsSection from './AccordsSection';
+import FragRow from './FragRow';
 import TagTable from './TagTable';
+import VersusChart from './VersusChart';
 import YourNose from './YourNose';
 
 /** Jump links, most personal first. Each target id comes from its section's title (see SectionHead). */
 const JUMPS = [
   ['your-nose', 'Nose'],
   ['taste-match', 'Matches'],
+  ['you-vs-friend', 'You vs friend'],
   ['try-next', 'Try next'],
   ['similarity-map', 'Map'],
   ['everyone-loves', 'Loved'],
@@ -115,6 +118,8 @@ export default function Overlap({ api, onOpen }: { api: RoomApi; onOpen: (id: st
         <SectionHead title="Taste match" />
         <TasteMatch pairs={a.pairs} meId={me.id} nameOf={nameOf} />
       </section>
+
+      <VersusChart meId={me.id} members={members} pairs={a.pairs} idx={a.idx} fragById={fragById} onOpen={onOpen} />
 
       <div className="split">
         <section className="stack-sm">
@@ -368,32 +373,6 @@ function SimilarityMap({ members, matrix }: { members: Member[]; matrix: ReturnT
         <li>“·” not enough in common</li>
       </ul>
     </>
-  );
-}
-
-function FragRow({
-  f,
-  onOpen,
-  detail,
-  children,
-}: {
-  f?: Fragrance;
-  onOpen: (id: string) => void;
-  detail?: ReactNode;
-  children?: ReactNode;
-}) {
-  if (!f) return null;
-  return (
-    <li>
-      <button className="frag-row" onClick={() => onOpen(f.id)}>
-        <span className="frag-row-text">
-          <span className="frag-name">{f.name}</span>
-          <span className="muted small">{f.house}</span>
-          {detail}
-        </span>
-        {children && <span className="frag-row-tiers">{children}</span>}
-      </button>
-    </li>
   );
 }
 

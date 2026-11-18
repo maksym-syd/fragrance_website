@@ -265,7 +265,7 @@ scripts/restore.ts                insert-only restore of one room from audit_log
 scripts/build-catalog.ts          Parfumo CSV -> public/catalog/
 scripts/backfill-details.ts       plan, then apply, fragrance details (logic in scripts/lib/)
 src/lib/overlap.ts                pure scoring math (+ overlap.test.ts)
-src/lib/taste.ts                  baselines, lift, Your nose, table readings (+ taste.test.ts)
+src/lib/taste.ts                  baselines, lift, Your nose, table readings, You vs friend grid (+ taste.test.ts)
 src/lib/catalog.ts                catalog loader and search
 src/lib/reference.ts              reviewed house, typo and accord maps
 src/lib/details.ts                form, catalog and row conversions
@@ -275,7 +275,7 @@ src/lib/audit.test.ts             005/006 tests in PGlite
 src/lib/restore.test.ts           restore tests in PGlite
 src/hooks/useRoom.ts              room data, realtime subscription, optimistic writes
 src/pages/                        SignIn, Home, Room (+ not-invited and join screens)
-src/components/                   MyTiers (dnd-kit), TierSheet, Overlap, YourNose, TagTable, AccordsSection, AddFragrance, FragranceForm, Combobox, TokenInput, MembersPanel, ExportBoard
+src/components/                   MyTiers (dnd-kit), TierSheet, Overlap, YourNose, VersusChart, TagTable, FragRow, AccordsSection, AddFragrance, FragranceForm, Combobox, TokenInput, MembersPanel, ExportBoard
 ```
 
 ## Scoring
@@ -288,3 +288,4 @@ Tiers count as S = +2, A = +1, B = 0, C = −1, D = −2; no ranking means "have
 - **Lift** (by note, by accord, Your nose): how far above or below *your own* average you rank bottles with a tag, shrunk when there are few: `count × (avg − your average) / (count + 2)`. ▲/▼ marks ±0.5 or more.
 - **By note / By accord:** each person's average tier per tag with its lift, sorted by how much the lifts differ between people (toggle: most common).
 - **Your nose:** your strongest pulls and dislikes (notes and accords on 2+ bottles, lift ±0.5+), your average against the room's (5+ ranked), and perfumer or house streaks (3+ bottles). Details and reasoning: [`docs/audit/taste.md`](docs/audit/taste.md).
+- **You vs friend:** every bottle you and one friend both ranked, on a 5×5 grid of your tier (across) against theirs (up); the number in each square is how many land there and the dot's area follows it. It opens on your closest match by shrunk score and needs 2+ shared. The line above it counts same-tier and within-one-tier bottles and names the widest split (2+ tiers apart).
