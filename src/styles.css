@@ -828,6 +828,24 @@ kbd {
 .frag-row-tiers { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex: none; max-width: 50%; }
 
 .insights { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Two-way toggle (e.g. "What divides you" / "Most common"). 44px on touch, 36px with a mouse. */
+.seg { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); width: fit-content; max-width: 100%; }
+.seg button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.seg button[aria-pressed='true'] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--shadow); }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (hover: hover) and (pointer: fine) { .seg button { min-height: 36px; } }
+/* ▲ ▼ next to an average: half a tier or more from that person's own average. */
+.lift { font-size: 10px; line-height: 1; color: var(--ink-2); }
 /* "S +2 · A +1 · B 0 · C −1 · D −2" under anything that shows an average. */
 .scale-legend { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .insights li {

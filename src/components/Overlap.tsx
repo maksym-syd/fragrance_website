@@ -9,20 +9,21 @@ import {
   indexRankings,
   MIN_COMMON,
   mostDivisive,
-  noteOverlap,
   similarityMatrix,
   SCALE_LEGEND,
   sortedByAverage,
+  tagOverlap,
   TIERS,
   tierForValue,
   tryNext,
   type FragranceStats,
-  type NoteRow,
   type PairMatch,
 } from '../lib/overlap';
+import { memberBaselines } from '../lib/taste';
 import type { Fragrance, Member } from '../lib/types';
 import { Empty, SectionHead, TierLetter } from './ui';
 import AccordsSection from './AccordsSection';
+import TagTable from './TagTable';
 
 /** Jump links, most personal first. Each target id comes from its section's title (see SectionHead). */
 const JUMPS = [
@@ -65,7 +66,8 @@ export default function Overlap({ api, onOpen }: { api: RoomApi; onOpen: (id: st
       loves: everyoneLoves(idx),
       divisive: mostDivisive(idx),
       next: tryNext(me.id, ids, idx),
-      notes: noteOverlap(api.fragrances, idx),
+      notes: tagOverlap(api.fragrances, idx, (f) => f.notes),
+      baselines: memberBaselines(idx),
       table: sortedByAverage(idx),
     };
   }, [api.rankings, api.fragrances, memberIds.join(','), me.id]);
@@ -188,7 +190,15 @@ export default function Overlap({ api, onOpen }: { api: RoomApi; onOpen: (id: st
         </section>
       </div>
 
-      <NotesSection notes={a.notes} members={members} />
+      <TagTable
+        title="By note"
+        noun="Note"
+        rows={a.notes}
+        baselines={a.baselines}
+        members={members}
+        limit={16}
+        empty="Add notes (vanilla, citrus, oud…) to ranked fragrances to see which ones you share."
+      />
       <AccordsSection api={api} members={members} />
 
       <section className="stack-sm">
@@ -425,80 +435,6 @@ function Extremes({
         </span>
       ))}
     </span>
-  );
-}
-
-const LIKE = 3.5;
-const DISLIKE = 2.5;
-
-function noteInsights(notes: NoteRow[], members: Member[]): string[] {
-  const name = (id: string) => members.find((m) => m.id === id)?.display_name ?? '—';
-  const out: string[] = [];
-  for (const n of notes) {
-    const entries = [...n.perMember.entries()];
-    // Skip one-off notes: an insight needs 2+ people and 3+ rankings behind it.
-    if (entries.length < 2 || n.totalRankings < 3) continue;
-    const likers = entries.filter(([, v]) => v.avg >= LIKE);
-    const dislikers = entries.filter(([, v]) => v.avg <= DISLIKE);
-    if (likers.length === entries.length) out.push(`Everyone likes ${n.note}`);
-    else if (dislikers.length === entries.length) out.push(`Nobody’s into ${n.note}`);
-    else if (likers.length === 1 && dislikers.length === entries.length - 1) out.push(`Only ${name(likers[0][0])} likes ${n.note}`);
-    else if (dislikers.length === 1 && likers.length === entries.length - 1) out.push(`Everyone but ${name(dislikers[0][0])} likes ${n.note}`);
-    if (out.length >= 6) break;
-  }
-  return out;
-}
-
-function NotesSection({ notes, members }: { notes: NoteRow[]; members: Member[] }) {
-  const top = notes.slice(0, 16);
-  const insights = noteInsights(notes, members);
-  return (
-    <section className="stack-sm">
-      <SectionHead title="By note" hint="Average tier per person" />
-      {top.length === 0 ? (
-        <p className="muted">Add notes (vanilla, citrus, oud…) to ranked fragrances to see which ones you share.</p>
-      ) : (
-        <>
-          {insights.length > 0 && (
-            <ul className="insights">
-              {insights.map((t) => <li key={t}>{t}</li>)}
-            </ul>
-          )}
-          <div className="scroll-x">
-            <table className="grid-table">
-              <thead>
-                <tr>
-                  <th scope="col" className="sticky-col">Note</th>
-                  {members.map((m) => <th key={m.id} scope="col" className="ellipsis">{m.display_name}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {top.map((n) => (
-                  <tr key={n.note}>
-                    <th scope="row" className="sticky-col">{n.note}</th>
-                    {members.map((m) => {
-                      const v = n.perMember.get(m.id);
-                      return (
-                        <td key={m.id}>
-                          {v ? (
-                            <span className="cell-avg" title={`average ${formatScore(v.avg)} over ${v.count}`}>
-                              <TierLetter tier={tierForValue(v.avg)} size="sm" />
-                              <span className="num fine muted">{v.count}</span>
-                            </span>
-                          ) : (
-                            <TierLetter tier={null} size="sm" />
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-    </section>
   );
 }
 
