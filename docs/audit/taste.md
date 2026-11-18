@@ -134,8 +134,9 @@ source, pair sort) uses a shrunk score, so 2 lucky bottles don't win.
 **Algorithm:**
 ```
 raw     = tasteMatch(a, b).score                  // unchanged, still what's displayed
-prior   = mean of all scored pairs in the room, or 60 when there are none
-          // 60 = expected score for two people ranking uniformly at random: E|a−b| = 1.6
+prior   = 60   // expected score for two people ranking uniformly at random: E|a−b| = 1.6
+          // (Implemented as fixed. A room-average prior was considered, but in a room where
+          //  everyone agrees it lets 2 lucky bottles outrank 15 solid ones again.)
 shrunk  = (n·raw + K·prior) / (n + K)              K = 3
 label   = n < 5 → "rough" · n < 10 → "fair" · else "solid"
 ```

@@ -63,22 +63,50 @@ export function tasteMatch(a: Map<string, number> | undefined, b: Map<string, nu
   return { common, score: Math.round(100 - (totalDiff / common / 4) * 100) };
 }
 
+// ---------------------------------------------------------------------------
+// How sure is a match? Two shared bottles at 100% shouldn't beat fifteen at 88%.
+// ---------------------------------------------------------------------------
+
+/** Expected match for two people ranking at random: E|a−b| = 1.6 tiers → 100 − 1.6/4×100. */
+export const CHANCE_MATCH = 60;
+/** Shared bottles' worth of weight given to the prior. */
+export const MATCH_K = 3;
+
+export type Confidence = 'rough' | 'fair' | 'solid';
+
+/** Under 5 shared is rough, under 10 fair, 10+ solid. */
+export function confidence(common: number): Confidence {
+  return common < 5 ? 'rough' : common < 10 ? 'fair' : 'solid';
+}
+
+/**
+ * Pull a raw score towards chance in proportion to how little it rests on: (n·raw + K·60)/(n + K).
+ * The prior is fixed at chance rather than the room's own average on purpose: in a room where
+ * everyone agrees, a room prior would let 2 lucky bottles beat 15 solid ones again.
+ */
+export function shrinkMatch(score: number, common: number, prior = CHANCE_MATCH, k = MATCH_K): number {
+  return (common * score + k * prior) / (common + k);
+}
+
 export interface PairMatch extends Match {
   a: string;
   b: string;
+  /** The score used for ordering: `score` shrunk towards chance (see shrinkMatch). Null when `score` is. */
+  shrunk: number | null;
 }
 
-/** Every unordered pair of members, best match first; pairs without enough data last. */
+/** Every unordered pair of members, most trustworthy best match first; pairs without enough data last. */
 export function allPairs(memberIds: string[], idx: RankIndex): PairMatch[] {
   const out: PairMatch[] = [];
   for (let i = 0; i < memberIds.length; i++) {
     for (let j = i + 1; j < memberIds.length; j++) {
       const a = memberIds[i];
       const b = memberIds[j];
-      out.push({ a, b, ...tasteMatch(idx.get(a), idx.get(b)) });
+      const m = tasteMatch(idx.get(a), idx.get(b));
+      out.push({ a, b, ...m, shrunk: m.score === null ? null : shrinkMatch(m.score, m.common) });
     }
   }
-  return out.sort((x, y) => (y.score ?? -1) - (x.score ?? -1) || y.common - x.common);
+  return out.sort((x, y) => (y.shrunk ?? -1) - (x.shrunk ?? -1) || y.common - x.common);
 }
 
 /** Symmetric matrix keyed [rowMember][colMember]. Diagonal is the member against themselves. */
@@ -135,21 +163,22 @@ export function mostDivisive(idx: RankIndex): FragranceStats[] {
 }
 
 export interface TryNext {
-  /** Closest match, or null if nobody shares 2+ rankings with this member. */
-  match: (Match & { member_id: string }) | null;
+  /** Closest match by shrunk score, or null if nobody shares 2+ rankings with this member. */
+  match: (Match & { member_id: string; shrunk: number }) | null;
   /** Fragrance ids the member hasn't ranked that their closest match rated S or A, best first. */
   fragranceIds: string[];
 }
 
 export function tryNext(memberId: string, memberIds: string[], idx: RankIndex): TryNext {
   const mine = idx.get(memberId);
-  let best: (Match & { member_id: string }) | null = null;
+  let best: (Match & { member_id: string; shrunk: number }) | null = null;
   for (const other of memberIds) {
     if (other === memberId) continue;
     const m = tasteMatch(mine, idx.get(other));
     if (m.score === null) continue;
-    if (!best || m.score > best.score! || (m.score === best.score && m.common > best.common)) {
-      best = { ...m, member_id: other };
+    const shrunk = shrinkMatch(m.score, m.common);
+    if (!best || shrunk > best.shrunk || (shrunk === best.shrunk && m.common > best.common)) {
+      best = { ...m, member_id: other, shrunk };
     }
   }
   if (!best) return { match: null, fragranceIds: [] };
