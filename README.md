@@ -198,6 +198,7 @@ scripts/backup.ts                 read-only full JSON backup
 scripts/build-catalog.ts          Parfumo CSV -> public/catalog/
 scripts/backfill-details.ts       plan, then apply, fragrance details (logic in scripts/lib/)
 src/lib/overlap.ts                pure scoring math (+ overlap.test.ts)
+src/lib/taste.ts                  baselines, lift, Your nose, table readings (+ taste.test.ts)
 src/lib/catalog.ts                catalog loader and search
 src/lib/reference.ts              reviewed house, typo and accord maps
 src/lib/details.ts                form, catalog and row conversions
@@ -205,14 +206,16 @@ src/lib/rls.test.ts               RLS policy tests in PGlite
 src/lib/backfill.test.ts          migration and backfill tests in PGlite
 src/hooks/useRoom.ts              room data, realtime subscription, optimistic writes
 src/pages/                        SignIn, Home, Room (+ not-invited and join screens)
-src/components/                   MyTiers (dnd-kit), TierSheet, Overlap, AccordsSection, AddFragrance, FragranceForm, Combobox, TokenInput, MembersPanel, ExportBoard
+src/components/                   MyTiers (dnd-kit), TierSheet, Overlap, YourNose, TagTable, AccordsSection, AddFragrance, FragranceForm, Combobox, TokenInput, MembersPanel, ExportBoard
 ```
 
 ## Scoring
 Tiers count as S = +2, A = +1, B = 0, C = −1, D = −2; no ranking means "haven't tried". Averages are shown with a sign (+0.8, −1.2, 0), and the export's `score` columns use the same scale.
-- **Taste match** for a pair = `100 − mean(|diff|) / 4 × 100` over the fragrances both people ranked. It needs at least 2 in common.
+- **Taste match** for a pair = `100 − mean(|diff|) / 4 × 100` over the fragrances both people ranked. It needs at least 2 in common. Each match is labelled by how much it rests on: *rough* (under 5 shared), *fair* (under 10), *solid* (10+).
+- **Closest match** (ordering, and the source of Try next) uses the match shrunk towards chance: `(n × score + 3 × 60) / (n + 3)`, where 60 is what two random rankers would score. So 15 shared at 88% beats 2 shared at 100%. The raw % is what's shown.
 - **Everyone loves:** ranked by 2+ people, and every one of them gave A or better.
 - **Most divisive:** highest minus lowest tier ≥ 3.
 - **Try next:** fragrances you haven't ranked that your closest match rated S or A.
-- **By note:** each person's average tier across fragrances carrying that note tag.
-- **By accord:** the same, per accord.
+- **Lift** (by note, by accord, Your nose): how far above or below *your own* average you rank bottles with a tag, shrunk when there are few: `count × (avg − your average) / (count + 2)`. ▲/▼ marks ±0.5 or more.
+- **By note / By accord:** each person's average tier per tag with its lift, sorted by how much the lifts differ between people (toggle: most common).
+- **Your nose:** your strongest pulls and dislikes (notes and accords on 2+ bottles, lift ±0.5+), your average against the room's (5+ ranked), and perfumer or house streaks (3+ bottles). Details and reasoning: [`docs/audit/taste.md`](docs/audit/taste.md).
