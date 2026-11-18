@@ -765,6 +765,11 @@ kbd {
 .pair-score { grid-area: score; display: inline-flex; align-items: center; gap: 10px; justify-self: end; text-align: right; }
 .meter { width: 64px; height: 6px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
 .meter > span { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+/* Under 5 shared: the bar is hatched, so a lucky 100% doesn't look as solid as an earned 88%. */
+.pair-rough .meter > span {
+  background: repeating-linear-gradient(-45deg, var(--accent) 0 3px, color-mix(in oklab, var(--accent) 35%, var(--surface-2)) 3px 6px);
+}
+.conf-solid { color: var(--ink-2); font-weight: 500; }
 
 .scroll-x {
   overflow-x: auto;
@@ -792,6 +797,8 @@ kbd {
 .heat-strong { color: var(--on-accent); }
 .heat-self { color: var(--muted); background: var(--surface-2); }
 .heat-na { color: var(--muted); border: 1px dashed var(--line); }
+.heat-rough { outline: 2px dashed var(--muted); outline-offset: -4px; }
+.heat-legend .heat-rough { outline-offset: -1px; outline-width: 1.5px; background: var(--surface); }
 .heat-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); }
 .heat-legend li { display: inline-flex; align-items: center; gap: 5px; }
 .heat-legend .heat { width: 14px; height: 14px; border-radius: 4px; }

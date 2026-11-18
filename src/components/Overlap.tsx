@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { RoomApi } from '../hooks/useRoom';
 import {
   allPairs,
+  confidence,
   everyoneLoves,
   formatScore,
   indexRankings,
@@ -112,14 +113,16 @@ export default function Overlap({ api, onOpen }: { api: RoomApi; onOpen: (id: st
             </p>
           ) : a.next.fragranceIds.length === 0 ? (
             <p className="muted">
-              Your closest match is <strong>{nameOf(a.next.match.member_id)}</strong> ({a.next.match.score}%) — and you’ve
+              Your closest match is <strong>{nameOf(a.next.match.member_id)}</strong>{' '}
+              <span className="num">({a.next.match.score}%, {a.next.match.common} shared)</span> — and you’ve
               already tried everything they love.
             </p>
           ) : (
             <>
               <p>
                 Your closest match is <strong>{nameOf(a.next.match.member_id)}</strong>{' '}
-                <span className="num">({a.next.match.score}%)</span>. They love these and you haven’t ranked them:
+                <span className="num">({a.next.match.score}%, {a.next.match.common} shared)</span>. They love these and you
+                haven’t ranked them:
               </p>
               <Capped items={a.next.fragranceIds} limit={5}>
                 {(ids) => (
@@ -213,8 +216,9 @@ function Capped<T>({ items, limit, children }: { items: T[]; limit: number; chil
 }
 
 function PairRow({ pair, label, mine }: { pair: PairMatch; label: ReactNode; mine?: boolean }) {
+  const conf = confidence(pair.common);
   return (
-    <li className={`pair ${mine ? 'pair-me' : ''}`}>
+    <li className={`pair ${mine ? 'pair-me' : ''} ${pair.score !== null && conf === 'rough' ? 'pair-rough' : ''}`}>
       <span className="pair-names">{label}</span>
       {pair.score === null ? (
         <span className="pair-score muted small">need {MIN_COMMON}+ in common</span>
@@ -226,7 +230,10 @@ function PairRow({ pair, label, mine }: { pair: PairMatch; label: ReactNode; min
           <strong className="num">{pair.score}%</strong>
         </span>
       )}
-      <span className="pair-common num muted small">{pair.common} in common</span>
+      <span className="pair-common num muted small">
+        {pair.common} shared
+        {pair.score !== null && <> · <span className={`conf conf-${conf}`}>{conf}</span></>}
+      </span>
     </li>
   );
 }
@@ -246,7 +253,8 @@ function TasteMatch({ pairs, meId, nameOf }: { pairs: PairMatch[]; meId: string;
             <p className="verdict">You and {nameOf(other(closest))} agree most</p>
             <p className="muted">
               <span className="num">{closest.score}%</span> match over the{' '}
-              <span className="num">{closest.common}</span> fragrances you’ve both ranked.
+              <span className="num">{closest.common}</span> fragrances you’ve both ranked
+              {confidence(closest.common) === 'rough' ? ', so it’s a rough read for now.' : '.'}
               {furthest && <> You’re furthest from {nameOf(other(furthest))}, at <span className="num">{furthest.score}%</span>.</>}
             </p>
           </>
@@ -316,9 +324,9 @@ function SimilarityMap({ members, matrix }: { members: Member[]; matrix: ReturnT
                   return (
                     <td
                       key={col.id}
-                      className={`heat num ${band.heat > 60 ? 'heat-strong' : ''}`}
+                      className={`heat num ${band.heat > 60 ? 'heat-strong' : ''} ${confidence(cell.common) === 'rough' ? 'heat-rough' : ''}`}
                       style={{ '--heat': `${band.heat}%` } as React.CSSProperties}
-                      title={`${row.display_name} × ${col.display_name}: ${cell.score}% over ${cell.common}`}
+                      title={`${row.display_name} × ${col.display_name}: ${cell.score}% over ${cell.common} shared (${confidence(cell.common)})`}
                     >
                       {cell.score}
                     </td>
@@ -336,6 +344,7 @@ function SimilarityMap({ members, matrix }: { members: Member[]; matrix: ReturnT
             {b.label}
           </li>
         ))}
+        <li><span className="heat heat-rough" aria-hidden /> rough: under 5 shared</li>
         <li>“·” not enough in common</li>
       </ul>
     </>
