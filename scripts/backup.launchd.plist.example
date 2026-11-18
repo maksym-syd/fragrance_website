@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Weekly `npm run backup` on this Mac, Sundays at 20:00. See "Scheduled backups" in README.md.
+
+  1. Copy to ~/Library/LaunchAgents/com.scenttiers.backup.plist
+  2. Replace every /ABSOLUTE/PATH/TO/REPO with the repo folder (`pwd` in the repo), and
+     /ABSOLUTE/DIR/OF/NPM with the folder from `dirname "$(which npm)"` (node must be there too).
+  3. launchctl load ~/Library/LaunchAgents/com.scenttiers.backup.plist
+
+  If the Mac is asleep at 20:00 on Sunday, launchd runs the job once when it wakes. If it is shut
+  down, that week is skipped. Backups only read; old ones are never deleted automatically.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.scenttiers.backup</string>
+
+  <key>WorkingDirectory</key>
+  <string>/ABSOLUTE/PATH/TO/REPO</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/ABSOLUTE/DIR/OF/NPM/npm</string>
+    <string>run</string>
+    <string>backup</string>
+  </array>
+
+  <!-- launchd starts jobs with a bare PATH; npm needs node next to it. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/ABSOLUTE/DIR/OF/NPM:/usr/bin:/bin</string>
+  </dict>
+
+  <!-- Weekday 0 = Sunday. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>0</integer>
+    <key>Hour</key>
+    <integer>20</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <!-- exports/ must already exist (it does after one manual `npm run backup`). -->
+  <key>StandardOutPath</key>
+  <string>/ABSOLUTE/PATH/TO/REPO/exports/backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>/ABSOLUTE/PATH/TO/REPO/exports/backup.log</string>
+</dict>
+</plist>
